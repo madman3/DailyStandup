@@ -1,5 +1,6 @@
 # Bitbucket → Railway (backend/). Variables: RAILWAY_TOKEN (required, secured).
-# Optional: RAILWAY_PROJECT_ID, RAILWAY_SERVICE if deploy fails without them.
+# Optional: RAILWAY_PROJECT_ID, RAILWAY_SERVICE, RAILWAY_ENVIRONMENT (defaults to production).
+# Note: CLI requires --environment whenever --project (-p) is used.
 #
 # Uses npx so Railway CLI is available without global npm PATH issues in CI.
 
@@ -13,10 +14,11 @@ definitions:
         script:
           - |
             set -e
+            ENV="${RAILWAY_ENVIRONMENT:-production}"
             if [ -n "$RAILWAY_PROJECT_ID" ] && [ -n "$RAILWAY_SERVICE" ]; then
-              npx --yes @railway/cli@latest up ./backend --ci -p "$RAILWAY_PROJECT_ID" -s "$RAILWAY_SERVICE"
+              npx --yes @railway/cli@latest up ./backend --ci -p "$RAILWAY_PROJECT_ID" -e "$ENV" -s "$RAILWAY_SERVICE"
             elif [ -n "$RAILWAY_PROJECT_ID" ]; then
-              npx --yes @railway/cli@latest up ./backend --ci -p "$RAILWAY_PROJECT_ID"
+              npx --yes @railway/cli@latest up ./backend --ci -p "$RAILWAY_PROJECT_ID" -e "$ENV"
             else
               npx --yes @railway/cli@latest up ./backend --ci
             fi

@@ -2,7 +2,7 @@
 
 ## Bitbucket Pipelines → Railway
 
-If you use **Bitbucket**, `bitbucket-pipelines.yml` deploys **`backend/`** with `railway up ./backend --ci` on pushes to **`master`**. Set **`RAILWAY_TOKEN`** (and optionally **`RAILWAY_PROJECT_ID`**, **`RAILWAY_SERVICE`**) in **Repository settings → Repository variables**. Avoid double deploys if Railway also builds from the same repo.
+If you use **Bitbucket**, `bitbucket-pipelines.yml` deploys **`backend/`** with `railway up ./backend --ci` on pushes to **`master`**. Set **`RAILWAY_TOKEN`** (and optionally **`RAILWAY_PROJECT_ID`**, **`RAILWAY_SERVICE`**) in **Repository settings → Repository variables**. If you pass **`RAILWAY_PROJECT_ID`**, the CLI also needs an environment: the pipeline uses **`RAILWAY_ENVIRONMENT`** (default **`production`**). Avoid double deploys if Railway also builds from the same repo.
 
 ## 1. Backend — Railway
 
