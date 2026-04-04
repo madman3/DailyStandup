@@ -1,14 +1,7 @@
-# Bitbucket Pipelines → Railway (backend only)
+# Bitbucket → Railway (backend/). Variables: RAILWAY_TOKEN (required, secured).
+# Optional: RAILWAY_PROJECT_ID, RAILWAY_SERVICE if deploy fails without them.
 #
-# 1) Bitbucket: Repository settings → Repository variables
-#    - RAILWAY_TOKEN = Project token from Railway → your project → Settings → Tokens
-#      (mark as Secured)
-#
-# 2) If the deploy step fails with "not linked" / missing project or service, add:
-#    - RAILWAY_PROJECT_ID = Project ID (Railway project → Settings → General)
-#    - RAILWAY_SERVICE = Service name as shown in Railway (e.g. backend), OR the service UUID
-#
-# Runs on pushes to `main` and `master` (common default branches).
+# Uses npx so Railway CLI is available without global npm PATH issues in CI.
 
 image: node:20
 
@@ -18,20 +11,17 @@ definitions:
         name: Deploy backend to Railway
         deployment: production
         script:
-          - npm install -g @railway/cli
           - |
             set -e
             if [ -n "$RAILWAY_PROJECT_ID" ] && [ -n "$RAILWAY_SERVICE" ]; then
-              railway up ./backend --ci -p "$RAILWAY_PROJECT_ID" -s "$RAILWAY_SERVICE"
+              npx --yes @railway/cli@latest up ./backend --ci -p "$RAILWAY_PROJECT_ID" -s "$RAILWAY_SERVICE"
             elif [ -n "$RAILWAY_PROJECT_ID" ]; then
-              railway up ./backend --ci -p "$RAILWAY_PROJECT_ID"
+              npx --yes @railway/cli@latest up ./backend --ci -p "$RAILWAY_PROJECT_ID"
             else
-              railway up ./backend --ci
+              npx --yes @railway/cli@latest up ./backend --ci
             fi
 
 pipelines:
   branches:
-    main:
-      - step: *deploy-backend-railway
     master:
       - step: *deploy-backend-railway

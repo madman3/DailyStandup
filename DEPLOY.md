@@ -2,7 +2,7 @@
 
 ## Bitbucket Pipelines → Railway
 
-If you use **Bitbucket**, `bitbucket-pipelines.yml` deploys the **`backend/`** folder with `railway up ./backend --ci` on pushes to **`main`** or **`master`**. Set **`RAILWAY_TOKEN`** (and optionally **`RAILWAY_PROJECT_ID`**, **`RAILWAY_SERVICE`**) in **Repository settings → Repository variables**. You can use this **instead of** Railway’s native GitHub-only connect, or alongside it—avoid two deploys firing on every push.
+If you use **Bitbucket**, `bitbucket-pipelines.yml` deploys **`backend/`** with `railway up ./backend --ci` on pushes to **`master`**. Set **`RAILWAY_TOKEN`** (and optionally **`RAILWAY_PROJECT_ID`**, **`RAILWAY_SERVICE`**) in **Repository settings → Repository variables**. Avoid double deploys if Railway also builds from the same repo.
 
 ## 1. Backend — Railway
 

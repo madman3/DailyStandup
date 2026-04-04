@@ -104,11 +104,13 @@ app.get("/api/telegram-status", async (_req, res) => {
 
 app.post("/webhook", verifyTelegramWebhookSecret, async (req, res) => {
   const update = req.body;
-  console.log(
-    "[webhook] update_id=%s has_message=%s",
-    update.update_id ?? "?",
-    Boolean(update.message?.text ?? update.edited_message?.text)
-  );
+  if (process.env.NODE_ENV !== "production") {
+    console.log(
+      "[webhook] update_id=%s has_message=%s",
+      update.update_id ?? "?",
+      Boolean(update.message?.text ?? update.edited_message?.text)
+    );
+  }
   const text =
     update.message?.text ?? update.edited_message?.text ?? update.channel_post?.text;
   const trimmed = text != null ? String(text).trim() : "";
@@ -143,5 +145,5 @@ app.post("/api/ingest", verifyTelegramWebhookSecret, async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Backend listening on http://localhost:${PORT}`);
+  console.log(`Backend listening on port ${PORT}`);
 });
