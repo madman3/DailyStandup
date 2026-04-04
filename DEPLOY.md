@@ -1,8 +1,12 @@
 # Deploy: Railway (API) + Vercel (UI)
 
+## Bitbucket Pipelines → Railway
+
+If you use **Bitbucket**, `bitbucket-pipelines.yml` deploys the **`backend/`** folder with `railway up ./backend --ci` on pushes to **`main`** or **`master`**. Set **`RAILWAY_TOKEN`** (and optionally **`RAILWAY_PROJECT_ID`**, **`RAILWAY_SERVICE`**) in **Repository settings → Repository variables**. You can use this **instead of** Railway’s native GitHub-only connect, or alongside it—avoid two deploys firing on every push.
+
 ## 1. Backend — Railway
 
-1. Push this repo to GitHub (or connect the repo in Railway).
+1. Push this repo to GitHub or Bitbucket (or connect the repo in Railway).
 2. **New project → Deploy from repo → set root directory to `backend`** (important for a monorepo).
 3. **Variables** (same names as your local `.env`):
 
