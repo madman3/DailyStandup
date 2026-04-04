@@ -1,0 +1,339 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #070709;
+  --bg-subtle: #0d0d12;
+  --surface: #111118;
+  --surface-hover: #16161f;
+  --border: #1f1f2e;
+  --border-bright: #2a2a3d;
+  --text: #f4f4f5;
+  --text-muted: #a1a1aa;
+  --text-faint: #71717a;
+  --accent: #22d3ee;
+  --accent-dim: rgba(34, 211, 238, 0.12);
+  --danger: #f87171;
+  --danger-bg: rgba(248, 113, 113, 0.08);
+  --danger-border: rgba(248, 113, 113, 0.25);
+  --warn: #fbbf24;
+  --radius: 14px;
+  --shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  font-family:
+    "SF Pro Display",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    sans-serif;
+  font-feature-settings: "ss01" on, "cv02" on;
+  line-height: 1.5;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  background: var(--bg);
+  background-image:
+    radial-gradient(ellipse 120% 80% at 50% -30%, rgba(34, 211, 238, 0.09), transparent 55%),
+    radial-gradient(ellipse 80% 50% at 100% 0%, rgba(139, 92, 246, 0.06), transparent 45%);
+  min-height: 100vh;
+}
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+.header {
+  margin-bottom: 0.25rem;
+}
+
+.header h1 {
+  margin: 0 0 0.35rem;
+  font-size: clamp(1.75rem, 4vw, 2.15rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, #fafafa 0%, #a5b4fc 45%, #22d3ee 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+code {
+  font-size: 0.88em;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 0.12em 0.45em;
+  border-radius: 6px;
+  color: #e4e4e7;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  margin-top: 1.25rem;
+  box-shadow: var(--shadow);
+}
+
+.panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #e4e4e7;
+  letter-spacing: -0.02em;
+}
+
+.mono {
+  margin: 0;
+  font-size: 0.8rem;
+  overflow: auto;
+  max-height: 50vh;
+  color: #d4d4d8;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.banner {
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  margin-top: 1rem;
+}
+
+.banner.error {
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: #fecaca;
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.small {
+  font-size: 0.85rem;
+}
+
+.tg-status {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: #d4d4d8;
+}
+
+.tg-status li {
+  margin-bottom: 0.35rem;
+}
+
+.messages h3 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+  color: #e4e4e7;
+}
+
+.messages ul {
+  margin: 0 0 1rem;
+  padding-left: 1.25rem;
+  color: #d4d4d8;
+}
+
+.messages li {
+  margin-bottom: 0.75rem;
+}
+
+.pill {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 500;
+  background: rgba(34, 211, 238, 0.12);
+  color: #67e8f9;
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  padding: 0.15em 0.5em;
+  border-radius: 999px;
+  margin-right: 0.35rem;
+}
+
+.analytics {
+  margin-top: 0.5rem;
+}
+
+.metrics-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.metric-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.2rem;
+  box-shadow: var(--shadow);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.metric-card:hover {
+  border-color: var(--border-bright);
+  background: var(--surface-hover);
+}
+
+.metric-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-bottom: 0.4rem;
+  font-weight: 600;
+}
+
+.metric-value {
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.metric-unit {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-left: 0.15rem;
+}
+
+.metric-sub {
+  margin-top: 0.4rem;
+}
+
+.insight-card {
+  background: linear-gradient(145deg, rgba(34, 211, 238, 0.08) 0%, var(--surface) 55%);
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  border-radius: var(--radius);
+  padding: 1.15rem 1.35rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow);
+}
+
+.insight-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #67e8f9;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.45rem;
+}
+
+.insight-text {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #e4e4e7;
+  line-height: 1.55;
+}
+
+.tasks-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.35rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow);
+}
+
+.task-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: #d4d4d8;
+}
+
+.task-list li {
+  margin-bottom: 0.4rem;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+@media (min-width: 900px) {
+  .charts-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.chart-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1rem 0.6rem;
+  box-shadow: var(--shadow);
+}
+
+.chart-title {
+  margin: 0 0 0.6rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #d4d4d8;
+  letter-spacing: -0.02em;
+}
+
+.chart-wrap {
+  width: 100%;
+  min-height: 240px;
+}
+
+.chart-empty {
+  margin: 0 0 1rem;
+}
+
+.details-debug summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-muted);
+  list-style: none;
+}
+
+.details-debug summary::-webkit-details-marker {
+  display: none;
+}
+
+.details-debug summary::before {
+  content: "";
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-right: 0.5rem;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(-45deg);
+  vertical-align: 0.15em;
+  transition: transform 0.15s ease;
+}
+
+.details-debug[open] summary::before {
+  transform: rotate(45deg);
+}
+
+.details-debug[open] summary {
+  margin-bottom: 0.75rem;
+}
