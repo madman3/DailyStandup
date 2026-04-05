@@ -1,12 +1,15 @@
 # Bitbucket → Railway (backend/)
 #
-# Variables (Repository settings → Repository variables):
-#   RAILWAY_TOKEN        — required, secured (Railway project token)
-#   RAILWAY_SERVICE      — Service UUID (Service → Settings → Service ID)
-#   RAILWAY_ENVIRONMENT  — optional; default production
+# Repository variables:
+#   RAILWAY_TOKEN     — required, Secured (Railway project token)
+#   RAILWAY_SERVICE   — required: Service UUID (Service → Settings → Service ID)
+#   RAILWAY_PROJECT_ID — optional
 #
-# Monorepo: use --path-as-root so ./backend archives correctly (fixes "prefix not found").
-# Never use ENV="${RAILWAY_ENVIRONMENT:-$RAILWAY_ENVIRONMENT}" — that leaves ENV empty.
+# Do NOT copy a broken ENV line. The script below hardcodes -e production (Railway default).
+# If your Railway environment is not named "production", change the two "production" literals below
+# or set unsecured variable RAILWAY_DEPLOY_ENV and use it (see script).
+#
+# Monorepo: --path-as-root fixes "prefix not found".
 
 image: node:20
 
@@ -18,18 +21,22 @@ definitions:
         script:
           - |
             set -e
-            ENV="${RAILWAY_ENVIRONMENT:-production}"
-            if [ -z "$ENV" ]; then ENV=production; fi
-            echo "Deploying with environment: $ENV"
-
-            UP='npx --yes @railway/cli@latest up ./backend --path-as-root --ci'
+            # Use literal default; Bitbucket "secured" vars can break ${VAR:-default} for ENV names.
+            RAILWAY_ENV_NAME="${RAILWAY_DEPLOY_ENV:-production}"
+            echo "Deploying to Railway environment: ${RAILWAY_ENV_NAME}"
 
             if [ -n "$RAILWAY_PROJECT_ID" ] && [ -n "$RAILWAY_SERVICE" ]; then
-              $UP -p "$RAILWAY_PROJECT_ID" -e "$ENV" -s "$RAILWAY_SERVICE"
+              npx --yes @railway/cli@latest up ./backend --path-as-root --ci \
+                -p "$RAILWAY_PROJECT_ID" \
+                -e "$RAILWAY_ENV_NAME" \
+                -s "$RAILWAY_SERVICE"
             elif [ -n "$RAILWAY_SERVICE" ]; then
-              $UP -e "$ENV" -s "$RAILWAY_SERVICE"
+              npx --yes @railway/cli@latest up ./backend --path-as-root --ci \
+                -e "$RAILWAY_ENV_NAME" \
+                -s "$RAILWAY_SERVICE"
             else
-              $UP
+              echo "ERROR: Set RAILWAY_SERVICE (Service UUID) in repository variables."
+              exit 1
             fi
 
 pipelines:
