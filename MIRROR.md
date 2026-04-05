@@ -38,14 +38,24 @@ chmod +x scripts/sync-to-github.sh
 ./scripts/sync-to-github.sh
 ```
 
-## Automatic sync (optional)
+## Automatic sync (recommended): Bitbucket Pipelines
 
-**Bitbucket — repository mirror**
+Every successful push to **`master`** on Bitbucket runs **`bitbucket-pipelines.yml`**, which:
 
-1. Bitbucket → **Repository settings** → **Repository details** (or search **Mirror**).
-2. Add a mirror to your GitHub repo URL, using a **GitHub personal access token** (HTTPS) or deploy key, per Atlassian’s mirror docs.
+1. Runs **`npm ci`** (CI).
+2. **Pushes the same commit** to **`github.com/madman3/DailyStandup`** branch **`master`**.
 
-Then every `git push` to Bitbucket can forward to GitHub without a second command.
+**One-time setup**
+
+1. GitHub → **Settings → Developer settings → Personal access tokens** → create a **classic** token with **`repo`** scope.
+2. Bitbucket → **Repository settings → Repository variables** → add **`GITHUB_MIRROR_TOKEN`** (value = that token, **Secured**).
+3. Push this repo to Bitbucket so the pipeline file is active.
+
+If the mirror step fails with auth errors, regenerate the PAT and confirm the token can push to **`madman3/DailyStandup`**.
+
+## Automatic sync (optional): Bitbucket UI mirror
+
+Some Bitbucket plans offer **Repository mirror** under **Repository settings**. You can add your GitHub repo URL with credentials per [Atlassian’s docs](https://support.atlassian.com/bitbucket-cloud/docs/use-repository-mirrors/). Use this **or** the pipeline mirror above, not both, unless you want double pushes.
 
 ## Railway
 

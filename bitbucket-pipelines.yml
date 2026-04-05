@@ -1,8 +1,10 @@
-# Bitbucket Pipelines — CI only (install + file check).
+# Bitbucket Pipelines
+# 1) CI: npm install check
+# 2) Mirror: push same commit to GitHub (Railway watches GitHub)
 #
-# Railway deploys from GitHub (repo: madman3/DailyStandup), root directory: backend.
-# Do not add Railway CLI here; it caused repeated "Service not found" from Bitbucket.
-# Sync Bitbucket → GitHub, then Railway rebuilds from GitHub.
+# Repository variables (Settings → Repository variables):
+#   GITHUB_MIRROR_TOKEN — Secured. GitHub classic PAT with repo scope (repo + push to madman3/DailyStandup).
+#                         Create: GitHub → Settings → Developer settings → Personal access tokens.
 
 clone:
   depth: full
@@ -18,3 +20,15 @@ pipelines:
             - npm ci
             - test -f backend/package.json
             - test -f backend/src/index.js
+      - step:
+          name: Mirror master to GitHub
+          script:
+            - |
+              set -e
+              if [ -z "$GITHUB_MIRROR_TOKEN" ]; then
+                echo "Set GITHUB_MIRROR_TOKEN in Bitbucket repository variables (GitHub PAT, repo scope)."
+                exit 1
+              fi
+              git remote remove github-mirror 2>/dev/null || true
+              git remote add github-mirror "https://${GITHUB_MIRROR_TOKEN}@github.com/madman3/DailyStandup.git"
+              git push github-mirror HEAD:refs/heads/master
