@@ -1,15 +1,12 @@
 # Bitbucket → Railway (backend/)
 #
-# Repository variables (Bitbucket → Settings → Repository variables):
-#   RAILWAY_TOKEN          — required, secured (Railway project token)
-#   RAILWAY_PROJECT_ID     — project UUID from Railway project settings
-#   RAILWAY_SERVICE        — service name OR service UUID from Railway (required if PROJECT_ID is set)
-#   RAILWAY_ENVIRONMENT    — optional, default production (must match env name in Railway)
+# Variables (Repository settings → Repository variables):
+#   RAILWAY_TOKEN        — required, secured (Railway project token)
+#   RAILWAY_SERVICE      — Service UUID (Service → Settings → Service ID)
+#   RAILWAY_ENVIRONMENT  — optional; default production
 #
-# If you set RAILWAY_PROJECT_ID, you must also set RAILWAY_SERVICE — the CLI needs -s with -p.
-# npm deprecation warnings from @railway/cli deps are safe to ignore.
-#
-# Uses npx so Railway CLI works in CI without global PATH issues.
+# Monorepo: use --path-as-root so ./backend archives correctly (fixes "prefix not found").
+# Never use ENV="${RAILWAY_ENVIRONMENT:-$RAILWAY_ENVIRONMENT}" — that leaves ENV empty.
 
 image: node:20
 
@@ -22,15 +19,17 @@ definitions:
           - |
             set -e
             ENV="${RAILWAY_ENVIRONMENT:-production}"
-            if [ -n "$RAILWAY_PROJECT_ID" ]; then
-              if [ -z "$RAILWAY_SERVICE" ]; then
-                echo "ERROR: RAILWAY_SERVICE is required when RAILWAY_PROJECT_ID is set."
-                echo "In Railway: open your project → click the service → Settings → copy Service ID or use the exact service name from the canvas."
-                exit 1
-              fi
-              npx --yes @railway/cli@latest up ./backend --ci -p "$RAILWAY_PROJECT_ID" -e "$ENV" -s "$RAILWAY_SERVICE"
+            if [ -z "$ENV" ]; then ENV=production; fi
+            echo "Deploying with environment: $ENV"
+
+            UP='npx --yes @railway/cli@latest up ./backend --path-as-root --ci'
+
+            if [ -n "$RAILWAY_PROJECT_ID" ] && [ -n "$RAILWAY_SERVICE" ]; then
+              $UP -p "$RAILWAY_PROJECT_ID" -e "$ENV" -s "$RAILWAY_SERVICE"
+            elif [ -n "$RAILWAY_SERVICE" ]; then
+              $UP -e "$ENV" -s "$RAILWAY_SERVICE"
             else
-              npx --yes @railway/cli@latest up ./backend --ci
+              $UP
             fi
 
 pipelines:
