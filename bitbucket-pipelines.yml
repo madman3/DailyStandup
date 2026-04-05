@@ -1,45 +1,20 @@
-# Bitbucket → Railway (backend/)
+# Bitbucket Pipelines — CI only (install + file check).
 #
-# Repository variables:
-#   RAILWAY_TOKEN     — required, Secured (Railway project token)
-#   RAILWAY_SERVICE   — required: Service UUID (Service → Settings → Service ID)
-#   RAILWAY_PROJECT_ID — optional
-#
-# Do NOT copy a broken ENV line. The script below hardcodes -e production (Railway default).
-# If your Railway environment is not named "production", change the two "production" literals below
-# or set unsecured variable RAILWAY_DEPLOY_ENV and use it (see script).
-#
-# Monorepo: --path-as-root fixes "prefix not found".
+# Railway deploys from GitHub (repo: madman3/DailyStandup), root directory: backend.
+# Do not add Railway CLI here; it caused repeated "Service not found" from Bitbucket.
+# Sync Bitbucket → GitHub, then Railway rebuilds from GitHub.
+
+clone:
+  depth: full
 
 image: node:20
-
-definitions:
-  steps:
-    - step: &deploy-backend-railway
-        name: Deploy backend to Railway
-        deployment: production
-        script:
-          - |
-            set -e
-            # Use literal default; Bitbucket "secured" vars can break ${VAR:-default} for ENV names.
-            RAILWAY_ENV_NAME="${RAILWAY_DEPLOY_ENV:-production}"
-            echo "Deploying to Railway environment: ${RAILWAY_ENV_NAME}"
-
-            if [ -n "$RAILWAY_PROJECT_ID" ] && [ -n "$RAILWAY_SERVICE" ]; then
-              npx --yes @railway/cli@latest up ./backend --path-as-root --ci \
-                -p "$RAILWAY_PROJECT_ID" \
-                -e "$RAILWAY_ENV_NAME" \
-                -s "$RAILWAY_SERVICE"
-            elif [ -n "$RAILWAY_SERVICE" ]; then
-              npx --yes @railway/cli@latest up ./backend --path-as-root --ci \
-                -e "$RAILWAY_ENV_NAME" \
-                -s "$RAILWAY_SERVICE"
-            else
-              echo "ERROR: Set RAILWAY_SERVICE (Service UUID) in repository variables."
-              exit 1
-            fi
 
 pipelines:
   branches:
     master:
-      - step: *deploy-backend-railway
+      - step:
+          name: Monorepo install check
+          script:
+            - npm ci
+            - test -f backend/package.json
+            - test -f backend/src/index.js
