@@ -7,12 +7,23 @@ Return ONLY valid JSON with this exact shape (no markdown, no explanation):
   "steps": number | null,
   "workout": string | null,
   "macros": { "protein": number | null, "carbs": number | null, "fat": number | null, "calories": number | null },
-  "tasks": string[],
+  "taskItems": [
+    {
+      "title": string,
+      "important": true | false | null,
+      "urgent": true | false | null,
+      "when": "YYYY-MM-DD" | null,
+      "needsClarification": boolean
+    }
+  ],
   "dailyScore": number | null,
   "coachingInsight": string | null
 }
 Rules:
-- Use null for fields not mentioned. Use [] for tasks if none.
+- Use null for fields not mentioned. Use [] for taskItems if none.
+- taskItems: each distinct task the user mentioned for the future / backlog (not things already done unless they imply follow-up work).
+- Eisenhower-style: "important" = high impact or strategic; "urgent" = time-sensitive or must happen very soon; "when" = deadline date YYYY-MM-DD if they gave one or you can infer a specific date.
+- needsClarification: true if you are not confident about important AND urgent AND when for this task (you would ask 1–2 follow-up questions). false if the message already makes priority clear enough.
 - workout: short phrase like "skipped", "legs day", "30 min run", or null.
 - dailyScore: integer 0-100 summarizing the day described, or null if impossible to infer.
 - coachingInsight: one short sentence of encouragement or advice, or null.
@@ -30,6 +41,45 @@ function strOrNull(v) {
   return s ? s.slice(0, 500) : null;
 }
 
+function normalizeTaskItem(el) {
+  if (!el || typeof el !== "object") return null;
+  const title = String(el.title || "")
+    .trim()
+    .slice(0, 500);
+  if (!title) return null;
+  let when = null;
+  if (el.when != null && el.when !== "") {
+    const s = String(el.when).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) when = s;
+  }
+  const clarified = when != null || el.important !== null || el.urgent !== null;
+  const needsClarification = Boolean(el.needsClarification) && !clarified;
+  return {
+    title,
+    important: el.important === true ? true : el.important === false ? false : null,
+    urgent: el.urgent === true ? true : el.urgent === false ? false : null,
+    when,
+    needsClarification,
+  };
+}
+
+function taskItemsFromLegacyTasks(rawTasks) {
+  if (!Array.isArray(rawTasks)) return [];
+  return rawTasks
+    .map((t) =>
+      typeof t === "string" && t.trim()
+        ? {
+            title: t.trim(),
+            important: null,
+            urgent: null,
+            when: null,
+            needsClarification: false,
+          }
+        : null
+    )
+    .filter(Boolean);
+}
+
 export function normalizeExtractedPatch(raw) {
   if (!raw || typeof raw !== "object") return {};
   const m = raw.macros && typeof raw.macros === "object" ? raw.macros : {};
@@ -37,6 +87,13 @@ export function normalizeExtractedPatch(raw) {
   if (score !== null) {
     score = Math.round(Math.max(0, Math.min(100, score)));
   }
+  let taskItems = Array.isArray(raw.taskItems)
+    ? raw.taskItems.map(normalizeTaskItem).filter(Boolean)
+    : [];
+  if (taskItems.length === 0 && Array.isArray(raw.tasks) && raw.tasks.length) {
+    taskItems = taskItemsFromLegacyTasks(raw.tasks);
+  }
+  const tasks = taskItems.map((t) => t.title);
   return {
     sleepHours: numOrNull(raw.sleepHours),
     steps: numOrNull(raw.steps),
@@ -47,7 +104,8 @@ export function normalizeExtractedPatch(raw) {
       fat: numOrNull(m.fat),
       calories: numOrNull(m.calories),
     },
-    tasks: Array.isArray(raw.tasks) ? raw.tasks.map(String).filter(Boolean) : [],
+    tasks,
+    taskItems,
     dailyScore: score,
     coachingInsight: strOrNull(raw.coachingInsight),
   };

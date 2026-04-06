@@ -18,7 +18,6 @@ export function daysToSeries(days) {
         calories: m.calories ?? null,
         workout: d.workout ?? null,
         coachingInsight: d.coachingInsight ?? null,
-        tasks: Array.isArray(d.tasks) ? d.tasks : [],
       };
     });
 }

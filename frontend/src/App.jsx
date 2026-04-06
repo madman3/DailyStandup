@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiUrl } from "./api.js";
 import { AnalyticsDashboard } from "./components/AnalyticsDashboard.jsx";
+import { TodoPanel } from "./components/TodoPanel.jsx";
 import { standupTodayKey } from "./lib/calendarDateKey.js";
 
 export default function App() {
@@ -8,6 +9,7 @@ export default function App() {
   const [telegram, setTelegram] = useState(null);
   const [err, setErr] = useState(null);
   const [lastFetch, setLastFetch] = useState(null);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,7 +42,7 @@ export default function App() {
       cancelled = true;
       clearInterval(id);
     };
-  }, []);
+  }, [refreshTick]);
 
   const todayKey = standupTodayKey();
   const tzLabel = import.meta.env.VITE_USER_TIMEZONE?.trim() || "UTC";
@@ -73,6 +75,15 @@ export default function App() {
 
       <AnalyticsDashboard days={data?.days} />
 
+      {data && (
+        <TodoPanel
+          todos={data.todos}
+          todayKey={todayKey}
+          accomplishments={today?.accomplishments}
+          onComplete={() => setRefreshTick((t) => t + 1)}
+        />
+      )}
+
       <section className="panel">
         <h2>
           Today ({todayKey}, {tzLabel})
@@ -87,20 +98,6 @@ export default function App() {
         {today?.lastError && (
           <div className="banner error">
             Gemini / parse error (message still saved): {today.lastError}
-          </div>
-        )}
-        {today?.messageLog?.length > 0 && (
-          <div className="messages">
-            <h3>Raw message log</h3>
-            <ul>
-              {today.messageLog.map((m, i) => (
-                <li key={`${m.at}-${i}`}>
-                  <span className="muted small">{m.at}</span>{" "}
-                  <span className="pill">{m.source}</span>
-                  <div>{m.text}</div>
-                </li>
-              ))}
-            </ul>
           </div>
         )}
       </section>

@@ -35,6 +35,12 @@ const TOOLTIP = {
   itemStyle: { color: "#e4e4e7" },
 };
 
+/** BarChart’s default Tooltip cursor is a light band — looks white on dark backgrounds. */
+const BAR_TOOLTIP = {
+  ...TOOLTIP,
+  cursor: { fill: "rgba(255, 255, 255, 0.06)" },
+};
+
 function MetricCard({ label, value, unit, sub }) {
   return (
     <div className="metric-card">
@@ -113,17 +119,6 @@ export function AnalyticsDashboard({ days }) {
         </div>
       )}
 
-      {latest?.tasks?.length > 0 && (
-        <div className="tasks-card">
-          <h3 className="chart-title">Tasks</h3>
-          <ul className="task-list">
-            {latest.tasks.map((t, i) => (
-              <li key={`${i}-${t}`}>{t}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {!hasAnyPoint && (
         <p className="muted">
           Charts fill in as Gemini extracts sleep, steps, score, and macros from your standups.
@@ -179,7 +174,7 @@ export function AnalyticsDashboard({ days }) {
               <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
               <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
               <YAxis tick={AXIS_TICK} width={44} axisLine={false} tickLine={false} />
-              <Tooltip {...TOOLTIP} />
+              <Tooltip {...BAR_TOOLTIP} />
               <Bar dataKey="steps" name="Steps" fill={COLORS.steps} radius={[6, 6, 0, 0]} maxBarSize={48} />
             </BarChart>
           </ResponsiveContainer>
@@ -191,7 +186,7 @@ export function AnalyticsDashboard({ days }) {
               <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
               <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
               <YAxis tick={AXIS_TICK} width={44} axisLine={false} tickLine={false} />
-              <Tooltip {...TOOLTIP} />
+              <Tooltip {...BAR_TOOLTIP} />
               <Legend wrapperStyle={{ color: "#a1a1aa", fontSize: 12, paddingTop: 8 }} />
               <Bar dataKey="protein" name="Protein (g)" fill={COLORS.protein} maxBarSize={28} radius={[4, 4, 0, 0]} />
               <Bar dataKey="carbs" name="Carbs (g)" fill={COLORS.carbs} maxBarSize={28} radius={[4, 4, 0, 0]} />

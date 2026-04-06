@@ -269,6 +269,99 @@ code {
   margin-bottom: 0.4rem;
 }
 
+.todo-panel {
+  margin-bottom: 1.25rem;
+}
+
+.panel-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.todo-panel-sub {
+  margin: 0 0 1rem;
+  max-width: 42rem;
+}
+
+.todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.todo-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  box-shadow: var(--shadow);
+}
+
+.todo-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.todo-check input {
+  margin-top: 0.2rem;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.todo-title {
+  line-height: 1.45;
+}
+
+.todo-meta {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.todo-pill.warn {
+  border-color: rgba(251, 191, 36, 0.45);
+  color: var(--warn);
+}
+
+.todo-accomplishments-title {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #a1a1aa;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.accomplishment-list {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  color: #d4d4d8;
+}
+
+.accomplishment-list li {
+  padding: 0.35rem 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.accomplishment-check {
+  color: #4ade80;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 .charts-grid {
   display: grid;
   grid-template-columns: 1fr;
