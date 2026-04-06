@@ -73,7 +73,7 @@ export default function App() {
         </div>
       )}
 
-      <AnalyticsDashboard days={data?.days} />
+      <AnalyticsDashboard days={data?.days} chartEndDate={todayKey} />
 
       {data && (
         <TodoPanel

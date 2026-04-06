@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { daysToSeries, latestDayEntry } from "../lib/series";
+import { CHART_WINDOW_DAYS, daysToSeries, latestDayEntry } from "../lib/series";
 
 const COLORS = {
   score: "#818cf8",
@@ -69,8 +69,11 @@ function ChartShell({ title, children, empty }) {
   );
 }
 
-export function AnalyticsDashboard({ days }) {
-  const series = daysToSeries(days);
+export function AnalyticsDashboard({ days, chartEndDate }) {
+  const series = daysToSeries(days, {
+    endDateKey: chartEndDate,
+    windowDays: CHART_WINDOW_DAYS,
+  });
   const latest = latestDayEntry(series);
   const hasAnyPoint = series.some(
     (r) =>
@@ -124,6 +127,11 @@ export function AnalyticsDashboard({ days }) {
           Charts fill in as Gemini extracts sleep, steps, score, and macros from your standups.
         </p>
       )}
+
+      <p className="muted small chart-window-hint">
+        Trends show the last {CHART_WINDOW_DAYS} calendar days (ending today). Days without a log
+        appear as gaps.
+      </p>
 
       <div className="charts-grid">
         <ChartShell title="Score trend" empty={!hasScore}>

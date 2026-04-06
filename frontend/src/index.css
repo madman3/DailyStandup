@@ -362,6 +362,11 @@ code {
   flex-shrink: 0;
 }
 
+.chart-window-hint {
+  margin: 0 0 0.75rem;
+  max-width: 40rem;
+}
+
 .charts-grid {
   display: grid;
   grid-template-columns: 1fr;
