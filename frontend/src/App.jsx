@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiUrl } from "./api.js";
 import { AnalyticsDashboard } from "./components/AnalyticsDashboard.jsx";
-
-function utcTodayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { standupTodayKey } from "./lib/calendarDateKey.js";
 
 export default function App() {
   const [data, setData] = useState(null);
@@ -45,7 +42,8 @@ export default function App() {
     };
   }, []);
 
-  const todayKey = utcTodayKey();
+  const todayKey = standupTodayKey();
+  const tzLabel = import.meta.env.VITE_USER_TIMEZONE?.trim() || "UTC";
   const today = data?.days?.[todayKey] ?? null;
   const dayKeys = data?.days ? Object.keys(data.days).sort().reverse() : [];
   const tgResult = telegram?.result;
@@ -76,11 +74,13 @@ export default function App() {
       <AnalyticsDashboard days={data?.days} />
 
       <section className="panel">
-        <h2>Today ({todayKey}, UTC)</h2>
+        <h2>
+          Today ({todayKey}, {tzLabel})
+        </h2>
         {!data && !err && <p className="muted">Loading…</p>}
         {data && !today && (
           <p className="muted">
-            No entry for this UTC day yet. Days with data:{" "}
+            No entry for this calendar day yet. Days with data:{" "}
             {dayKeys.length ? dayKeys.join(", ") : "none"}.
           </p>
         )}

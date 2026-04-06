@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
+import { standupDateKeyForInstant } from "./calendarDateKey.js";
 import { extractStandupFromMessage } from "./extractMessage.js";
 import { mergeIntoDay, readState } from "./stateStore.js";
 
@@ -14,17 +15,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 /** Append to messageLog, run Gemini, merge. On AI failure, still save message + lastError. */
-async function processStandupText(trimmed, source = "app") {
-  const dateKey = new Date().toISOString().slice(0, 10);
+async function processStandupText(trimmed, source = "app", atInstant = new Date()) {
+  const dateKey = standupDateKeyForInstant(atInstant);
+  const atIso = atInstant.toISOString();
   const state = await readState();
   const prev = state.days[dateKey] || {};
   const messageLog = [
     ...(prev.messageLog || []),
-    { text: trimmed.slice(0, 2000), at: new Date().toISOString(), source },
+    { text: trimmed.slice(0, 2000), at: atIso, source },
   ];
   const base = {
     lastRawText: trimmed.slice(0, 500),
-    lastMessageAt: new Date().toISOString(),
+    lastMessageAt: atIso,
     messageLog,
   };
   try {
@@ -111,16 +113,20 @@ app.post("/webhook", verifyTelegramWebhookSecret, async (req, res) => {
       Boolean(update.message?.text ?? update.edited_message?.text)
     );
   }
-  const text =
-    update.message?.text ?? update.edited_message?.text ?? update.channel_post?.text;
+  const msg = update.message ?? update.edited_message ?? update.channel_post;
+  const text = msg?.text;
   const trimmed = text != null ? String(text).trim() : "";
+  const atInstant =
+    msg?.date != null && typeof msg.date === "number"
+      ? new Date(msg.date * 1000)
+      : new Date();
 
   if (!trimmed) {
     return res.status(200).json({ ok: true, skipped: true });
   }
 
   try {
-    await processStandupText(trimmed, "telegram");
+    await processStandupText(trimmed, "telegram", atInstant);
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error("webhook / Gemini / state:", err);
