@@ -1,12 +1,22 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const EXTRACTION_PROMPT = `You extract structured health and productivity data from a short daily standup message.
+const EXTRACTION_PROMPT = `You extract structured health and productivity data from a daily standup message.
 Return ONLY valid JSON with this exact shape (no markdown, no explanation):
 {
   "sleepHours": number | null,
   "steps": number | null,
   "workout": string | null,
   "macros": { "protein": number | null, "carbs": number | null, "fat": number | null, "calories": number | null },
+  "metricsByDate": {
+    "YYYY-MM-DD": {
+      "sleepHours": number | null,
+      "steps": number | null,
+      "workout": string | null,
+      "macros": { "protein": number | null, "carbs": number | null, "fat": number | null, "calories": number | null },
+      "dailyScore": number | null,
+      "coachingInsight": string | null
+    }
+  },
   "taskItems": [
     {
       "title": string,
@@ -20,7 +30,10 @@ Return ONLY valid JSON with this exact shape (no markdown, no explanation):
   "coachingInsight": string | null
 }
 Rules:
-- Use null for fields not mentioned. Use [] for taskItems if none.
+- CRITICAL — Multiple dates: If the user mentions different metrics for different days (e.g. "2880 steps today and 11300 on Apr 4" or "yesterday 8k steps"), you MUST put each metric under the correct calendar key inside metricsByDate. Use one object per date (YYYY-MM-DD). Do NOT put every number under "today" only.
+- "today" / "this morning" / no date: map those metrics to the Reference calendar date provided below (same as top-level sleepHours/steps/etc. for a single-day message).
+- If everything clearly refers to one day only, you may use {} for metricsByDate and fill the top-level sleepHours, steps, etc. instead.
+- Use null for fields not mentioned. Use {} for metricsByDate if nothing is tied to specific dates. Use [] for taskItems if none.
 - taskItems: each distinct task the user mentioned for the future / backlog (not things already done unless they imply follow-up work).
 - Eisenhower-style: "important" = high impact or strategic; "urgent" = time-sensitive or must happen very soon; "when" = deadline date YYYY-MM-DD if they gave one or you can infer a specific date.
 - needsClarification: true if you are not confident about important AND urgent AND when for this task (you would ask 1–2 follow-up questions). false if the message already makes priority clear enough.
@@ -80,6 +93,123 @@ function taskItemsFromLegacyTasks(rawTasks) {
     .filter(Boolean);
 }
 
+function normalizeMacros(m) {
+  const x = m && typeof m === "object" ? m : {};
+  return {
+    protein: numOrNull(x.protein),
+    carbs: numOrNull(x.carbs),
+    fat: numOrNull(x.fat),
+    calories: numOrNull(x.calories),
+  };
+}
+
+/** Normalize one day's worth of metrics (used for top-level and metricsByDate values). */
+export function normalizeDayMetricsPartial(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  const m = raw.macros && typeof raw.macros === "object" ? raw.macros : {};
+  let score = numOrNull(raw.dailyScore);
+  if (score !== null) {
+    score = Math.round(Math.max(0, Math.min(100, score)));
+  }
+  return {
+    sleepHours: numOrNull(raw.sleepHours),
+    steps: numOrNull(raw.steps),
+    workout: strOrNull(raw.workout),
+    macros: normalizeMacros(m),
+    dailyScore: score,
+    coachingInsight: strOrNull(raw.coachingInsight),
+  };
+}
+
+function dayHasAnyMetric(p) {
+  if (!p || typeof p !== "object") return false;
+  if (
+    p.sleepHours != null ||
+    p.steps != null ||
+    p.workout != null ||
+    p.dailyScore != null ||
+    (p.coachingInsight && String(p.coachingInsight).trim())
+  ) {
+    return true;
+  }
+  const m = p.macros || {};
+  return [m.protein, m.carbs, m.fat, m.calories].some((x) => x != null);
+}
+
+function normalizeMetricsByDate(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  const out = {};
+  for (const [dk, val] of Object.entries(raw)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
+    const p = normalizeDayMetricsPartial(val);
+    if (dayHasAnyMetric(p)) out[dk] = p;
+  }
+  return out;
+}
+
+/**
+ * Build one merge patch per calendar day. Primary day (message "today") also gets top-level
+ * fields and task titles when metricsByDate did not already set those fields.
+ */
+export function buildPerDayPatches(extracted, primaryDateKey) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(primaryDateKey)) {
+    return { [primaryDateKey]: {} };
+  }
+  const byDate = extracted.metricsByDate && typeof extracted.metricsByDate === "object"
+    ? extracted.metricsByDate
+    : {};
+  const normalizedDays = {};
+  for (const [dk, val] of Object.entries(byDate)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
+    if (val && typeof val === "object" && dayHasAnyMetric(val)) normalizedDays[dk] = val;
+  }
+
+  const top = {
+    sleepHours: extracted.sleepHours,
+    steps: extracted.steps,
+    workout: extracted.workout,
+    macros: extracted.macros,
+    dailyScore: extracted.dailyScore,
+    coachingInsight: extracted.coachingInsight,
+  };
+
+  const dates = new Set([primaryDateKey, ...Object.keys(normalizedDays)]);
+  const out = {};
+
+  for (const dk of dates) {
+    if (dk !== primaryDateKey && !normalizedDays[dk]) continue;
+
+    let patch = {};
+    if (normalizedDays[dk]) {
+      patch = { ...normalizedDays[dk] };
+    }
+
+    if (dk === primaryDateKey) {
+      for (const field of ["sleepHours", "steps", "workout", "dailyScore", "coachingInsight"]) {
+        const tv = top[field];
+        if (tv != null && tv !== "" && (patch[field] == null || patch[field] === undefined)) {
+          patch[field] = tv;
+        }
+      }
+      if (top.macros) {
+        patch.macros = { ...(patch.macros || {}) };
+        for (const [mk, mv] of Object.entries(top.macros)) {
+          if (mv != null && mv !== undefined && patch.macros[mk] == null) {
+            patch.macros[mk] = mv;
+          }
+        }
+      }
+      if (Array.isArray(extracted.tasks) && extracted.tasks.length) {
+        patch.tasks = extracted.tasks;
+      }
+    }
+
+    out[dk] = patch;
+  }
+
+  return out;
+}
+
 export function normalizeExtractedPatch(raw) {
   if (!raw || typeof raw !== "object") return {};
   const m = raw.macros && typeof raw.macros === "object" ? raw.macros : {};
@@ -98,12 +228,8 @@ export function normalizeExtractedPatch(raw) {
     sleepHours: numOrNull(raw.sleepHours),
     steps: numOrNull(raw.steps),
     workout: strOrNull(raw.workout),
-    macros: {
-      protein: numOrNull(m.protein),
-      carbs: numOrNull(m.carbs),
-      fat: numOrNull(m.fat),
-      calories: numOrNull(m.calories),
-    },
+    macros: normalizeMacros(m),
+    metricsByDate: normalizeMetricsByDate(raw.metricsByDate),
     tasks,
     taskItems,
     dailyScore: score,
@@ -136,7 +262,7 @@ function sleep(ms) {
  */
 const DEFAULT_MODEL_FALLBACKS = ["gemini-2.5-flash-lite", "gemini-2.5-flash"];
 
-export async function extractStandupFromMessage(userText) {
+export async function extractStandupFromMessage(userText, calendarTodayKey) {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY not set");
@@ -145,7 +271,11 @@ export async function extractStandupFromMessage(userText) {
   const modelsToTry = envModel ? [envModel] : DEFAULT_MODEL_FALLBACKS;
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const prompt = `${EXTRACTION_PROMPT}\n\nMessage:\n${userText}`;
+  const ref =
+    calendarTodayKey && /^\d{4}-\d{2}-\d{2}$/.test(String(calendarTodayKey).trim())
+      ? `\n\nReference calendar date for "today" / "this morning" (map relative dates to YYYY-MM-DD using this): ${String(calendarTodayKey).trim()}`
+      : "";
+  const prompt = `${EXTRACTION_PROMPT}${ref}\n\nMessage:\n${userText}`;
   let lastErr;
 
   modelLoop: for (const modelName of modelsToTry) {

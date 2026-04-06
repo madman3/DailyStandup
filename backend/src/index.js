@@ -8,12 +8,13 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { standupDateKeyForInstant } from "./calendarDateKey.js";
-import { extractStandupFromMessage } from "./extractMessage.js";
+import { buildPerDayPatches, extractStandupFromMessage } from "./extractMessage.js";
 import {
   generateTaskFollowUpQuestions,
   parseTaskFollowUpReply,
 } from "./followUpTasks.js";
 import { mergeIntoDay, readState } from "./stateStore.js";
+import { formatStandupAckSummary, generateStandupChatReply } from "./standupReply.js";
 import { sendTelegramMessage } from "./telegramSend.js";
 import {
   clearPendingFollowUp,
@@ -100,11 +101,27 @@ async function processStandupPipeline(trimmed, atInstant, chatId) {
     lastMessageAt: atIso,
   };
   try {
-    const extracted = await extractStandupFromMessage(trimmed);
-    const { taskItems, ...dayPatch } = extracted;
-    await mergeIntoDay(dateKey, { ...dayPatch, ...base });
+    const extracted = await extractStandupFromMessage(trimmed, dateKey);
+    const { taskItems } = extracted;
+    const perDay = buildPerDayPatches(extracted, dateKey);
+    for (const [dk, patch] of Object.entries(perDay)) {
+      const payload = { ...patch };
+      if (dk === dateKey) {
+        Object.assign(payload, base);
+      }
+      await mergeIntoDay(dk, payload);
+    }
     await mergeTodosFromExtraction(taskItems, dateKey);
     if (chatId) {
+      try {
+        const summary = formatStandupAckSummary(extracted, perDay, dateKey);
+        let replyText = summary;
+        const aiReply = await generateStandupChatReply(trimmed, summary);
+        if (aiReply) replyText = aiReply;
+        await sendTelegramMessage(chatId, replyText);
+      } catch (sendErr) {
+        console.error("telegram standup reply failed:", sendErr);
+      }
       await maybeSendTaskFollowUp(chatId, trimmed);
     }
   } catch (err) {
@@ -149,7 +166,17 @@ async function processTelegramMessage(trimmed, atInstant, chatId) {
     }
   }
 
-  await processStandupPipeline(trimmed, atInstant, chatId);
+  try {
+    await processStandupPipeline(trimmed, atInstant, chatId);
+  } catch (e) {
+    console.error("processStandupPipeline:", e);
+    if (chatId) {
+      await sendTelegramMessage(
+        chatId,
+        "Sorry — I couldn’t save that standup. Please try again in a moment."
+      );
+    }
+  }
 }
 
 const app = express();
