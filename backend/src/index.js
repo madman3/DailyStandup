@@ -13,7 +13,7 @@ import {
   generateTaskFollowUpQuestions,
   parseTaskFollowUpReply,
 } from "./followUpTasks.js";
-import { mergeIntoDay, readState } from "./stateStore.js";
+import { appendStandupHistory, mergeIntoDay, readState } from "./stateStore.js";
 import { formatStandupAckSummary, generateStandupChatReply } from "./standupReply.js";
 import { sendTelegramMessage } from "./telegramSend.js";
 import {
@@ -93,7 +93,8 @@ async function handleClarificationReply(trimmed, chatId, dateKey) {
   }
 }
 
-async function processStandupPipeline(trimmed, atInstant, chatId) {
+async function processStandupPipeline(trimmed, atInstant, chatId, options = {}) {
+  const { historySource, skipHistory } = options;
   const dateKey = standupDateKeyForInstant(atInstant);
   const atIso = atInstant.toISOString();
   const base = {
@@ -112,11 +113,18 @@ async function processStandupPipeline(trimmed, atInstant, chatId) {
       await mergeIntoDay(dk, payload);
     }
     await mergeTodosFromExtraction(taskItems, dateKey);
+    if (!skipHistory) {
+      const histSrc = historySource ?? (chatId ? "telegram" : "ingest");
+      await appendStandupHistory({ text: trimmed, at: atIso, source: histSrc });
+    }
     if (chatId) {
       try {
         const summary = formatStandupAckSummary(extracted, perDay, dateKey);
         let replyText = summary;
-        const aiReply = await generateStandupChatReply(trimmed, summary);
+        const skipChat =
+          ["1", "true", "yes"].includes(process.env.SKIP_STANDUP_CHAT_REPLY?.trim().toLowerCase()) ||
+          process.env.STANDUP_REPLY_MODE?.trim().toLowerCase() === "simple";
+        const aiReply = skipChat ? null : await generateStandupChatReply(trimmed, summary);
         if (aiReply) replyText = aiReply;
         await sendTelegramMessage(chatId, replyText);
       } catch (sendErr) {
@@ -208,6 +216,8 @@ app.get("/", (_req, res) => {
 <li><a href="/api/state">GET /api/state</a> — dashboard JSON</li>
 <li>Local test (no Telegram): <code>POST /api/ingest</code> with JSON <code>{"text":"..."}</code> and header <code>X-Telegram-Bot-Api-Secret-Token</code> (same as webhook)</li>
 <li>Complete a todo: <code>POST /api/todos/:id/complete</code> with JSON <code>{"dateKey":"YYYY-MM-DD"}</code> (optional dateKey)</li>
+<li>Replay a saved standup (no Telegram): <code>POST /api/replay</code> with JSON <code>{"index":0}</code> (0 = most recent) and the same secret header as ingest</li>
+<li>List replay queue: <code>GET /api/standup-history</code> (same header)</li>
 <li>Dashboard (dev): run <code>npm run dev --workspace=frontend</code> then open <a href="http://localhost:5173">http://localhost:5173</a></li>
 </ul>
 </body></html>`);
@@ -303,6 +313,58 @@ app.post("/api/ingest", verifyTelegramWebhookSecret, async (req, res) => {
   } catch (err) {
     console.error("ingest:", err);
     res.status(500).json({ error: "Gemini or state write failed", detail: String(err.message) });
+  }
+});
+
+/** Recent standup texts (for replay). Same auth as webhook. */
+app.get("/api/standup-history", verifyTelegramWebhookSecret, async (_req, res) => {
+  try {
+    const state = await readState();
+    const hist = Array.isArray(state.standupHistory) ? state.standupHistory : [];
+    const entries = [...hist]
+      .reverse()
+      .slice(0, 20)
+      .map((h) => ({
+        id: h.id,
+        at: h.at,
+        source: h.source,
+        preview: String(h.text || "").slice(0, 200),
+      }));
+    res.json({ count: hist.length, entries });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+/** Re-run extraction on a previously stored message (uses original timestamp for day keys). */
+app.post("/api/replay", verifyTelegramWebhookSecret, async (req, res) => {
+  const raw = req.body?.index;
+  const index = typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
+  try {
+    const state = await readState();
+    const hist = Array.isArray(state.standupHistory) ? state.standupHistory : [];
+    if (hist.length === 0) {
+      return res.status(400).json({
+        error: "No stored standups yet. Send at least one successful standup first.",
+      });
+    }
+    const i = hist.length - 1 - index;
+    if (i < 0 || i >= hist.length) {
+      return res.status(400).json({ error: "Invalid index" });
+    }
+    const entry = hist[i];
+    await processStandupPipeline(entry.text, new Date(entry.at), null, {
+      historySource: "replay",
+      skipHistory: true,
+    });
+    res.json({
+      ok: true,
+      replayed: { at: entry.at, index, preview: String(entry.text || "").slice(0, 120) },
+    });
+  } catch (e) {
+    console.error("replay:", e);
+    res.status(500).json({ error: String(e.message) });
   }
 });
 

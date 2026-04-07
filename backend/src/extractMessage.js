@@ -1,4 +1,10 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import {
+  isModelNotFoundError,
+  isRateLimitError,
+  rateLimitWaitMs,
+  sleep,
+} from "./geminiRetry.js";
 
 const EXTRACTION_PROMPT = `You extract structured health and productivity data from a daily standup message.
 Return ONLY valid JSON with this exact shape (no markdown, no explanation):
@@ -237,30 +243,11 @@ export function normalizeExtractedPatch(raw) {
   };
 }
 
-function isRateLimitError(err) {
-  const msg = String(err?.message ?? err);
-  return (
-    msg.includes("429") ||
-    msg.includes("Too Many Requests") ||
-    msg.includes("quota") ||
-    msg.includes("RESOURCE_EXHAUSTED")
-  );
-}
-
-function isModelNotFoundError(err) {
-  const msg = String(err?.message ?? err);
-  return msg.includes("404") && (msg.includes("not found") || msg.includes("Not Found"));
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /**
- * gemini-1.5-flash was removed from the API (404). Defaults try current stable IDs.
+ * Try `gemini-2.5-flash` first — free-tier quotas are per model; if one is exhausted, the other may still work.
  * Set GEMINI_MODEL in .env to pin one model.
  */
-const DEFAULT_MODEL_FALLBACKS = ["gemini-2.5-flash-lite", "gemini-2.5-flash"];
+const DEFAULT_MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
 
 export async function extractStandupFromMessage(userText, calendarTodayKey) {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
@@ -286,7 +273,7 @@ export async function extractStandupFromMessage(userText, calendarTodayKey) {
       },
     });
 
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 5; attempt++) {
       try {
         const result = await model.generateContent(prompt);
         const text = result.response.text();
@@ -300,9 +287,14 @@ export async function extractStandupFromMessage(userText, calendarTodayKey) {
         if (isModelNotFoundError(err) && envModel) {
           throw err;
         }
-        if (isRateLimitError(err) && attempt < 3) {
-          await sleep(attempt === 1 ? 2000 : 5000);
-          continue;
+        if (isRateLimitError(err)) {
+          if (attempt < 5) {
+            await sleep(rateLimitWaitMs(err, attempt));
+            continue;
+          }
+          if (!envModel) {
+            continue modelLoop;
+          }
         }
         throw err;
       }

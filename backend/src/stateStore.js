@@ -14,6 +14,7 @@ export const DEFAULT_STATE = {
   days: {},
   todos: [],
   pendingFollowUp: null,
+  standupHistory: [],
 };
 
 /** Ensure version + days exist (older or hand-edited state.json may omit them). */
@@ -34,6 +35,7 @@ export function normalizeStateShape(state) {
       state.pendingFollowUp && typeof state.pendingFollowUp === "object"
         ? state.pendingFollowUp
         : null,
+    standupHistory: Array.isArray(state.standupHistory) ? state.standupHistory : [],
   };
 }
 
@@ -101,6 +103,23 @@ export async function readState() {
 
 export async function writeState(state) {
   await fs.writeFile(STATE_PATH, JSON.stringify(state, null, 2), "utf8");
+}
+
+const STANDUP_HISTORY_MAX = 50;
+
+/** Append a processed standup text for later replay (e.g. after deploy). Keeps last N entries. */
+export async function appendStandupHistory(entry) {
+  const state = await readState();
+  const hist = Array.isArray(state.standupHistory) ? [...state.standupHistory] : [];
+  hist.push({
+    id: randomUUID(),
+    text: String(entry.text || "").slice(0, 2000),
+    at: entry.at,
+    source: entry.source || "unknown",
+  });
+  state.standupHistory = hist.slice(-STANDUP_HISTORY_MAX);
+  state.version = Math.max(state.version || 1, 2);
+  await writeState(state);
 }
 
 /**
