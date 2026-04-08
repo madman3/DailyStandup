@@ -454,6 +454,19 @@ code {
   margin: 0 0 1rem;
 }
 
+.chart-inline-hint {
+  margin: 0 0 0.65rem;
+  line-height: 1.45;
+}
+
+.code-inline {
+  font-size: 0.78em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: rgba(39, 39, 42, 0.9);
+  color: #e4e4e7;
+}
+
 .details-debug summary {
   cursor: pointer;
   font-weight: 600;

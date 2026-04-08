@@ -26,8 +26,6 @@ const COLORS = {
   steps: "#4ade80",
   jobs: "#fbbf24",
   protein: "#c084fc",
-  carbs: "#fb923c",
-  fat: "#f472b6",
   calories: "#94a3b8",
   caloriesBurn: "#f97316",
   calorieNet: "#a78bfa",
@@ -126,8 +124,6 @@ export function AnalyticsDashboard({ days, chartEndDate }) {
       r.steps != null ||
       r.jobsApplied != null ||
       r.protein != null ||
-      r.carbs != null ||
-      r.fat != null ||
       r.calories != null ||
       r.caloriesBurned != null
   );
@@ -140,6 +136,7 @@ export function AnalyticsDashboard({ days, chartEndDate }) {
   const hasCalBurned = series.some((r) => r.caloriesBurned != null);
   const hasCalorieNet = series.some((r) => r.calorieNet != null);
   const hasProtein = series.some((r) => r.protein != null);
+  const hasCaloriesChart = hasCalIntake || hasCalBurned;
 
   const workoutGrid = chartEndDate ? buildWorkoutMonthGrid(chartEndDate, days || {}) : { title: "", columns: [] };
   const goalsGrid = chartEndDate
@@ -167,6 +164,22 @@ export function AnalyticsDashboard({ days, chartEndDate }) {
           unit=""
           sub={latest?.workout ? undefined : "Log in Telegram"}
         />
+        {latest?.calories != null && (
+          <MetricCard
+            label="Intake (kcal)"
+            value={latest.calories.toLocaleString()}
+            unit=""
+            sub="Food / logged calories"
+          />
+        )}
+        {latest?.caloriesBurned != null && (
+          <MetricCard
+            label="Burned (kcal)"
+            value={latest.caloriesBurned.toLocaleString()}
+            unit=""
+            sub="Active energy out"
+          />
+        )}
         {latest?.calorieNet != null && (
           <MetricCard
             label="Net kcal (today)"
@@ -276,97 +289,98 @@ export function AnalyticsDashboard({ days, chartEndDate }) {
         </ChartShell>
 
         <div className="chart-row-split">
-          <ChartShell title="Calorie intake (food)" empty={!hasCalIntake}>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
-                <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
-                <YAxis tick={AXIS_TICK} width={48} axisLine={false} tickLine={false} />
-                <Tooltip {...TOOLTIP} />
-                <Line
-                  type="monotone"
-                  dataKey="calories"
-                  name="Intake (kcal)"
-                  stroke={COLORS.calories}
-                  strokeWidth={2.5}
-                  dot={{ r: 3, fill: COLORS.calories, strokeWidth: 0 }}
-                  activeDot={{ r: 5 }}
-                  connectNulls
-                />
-              </LineChart>
-            </ResponsiveContainer>
+          <ChartShell title="Calories: intake vs burned" empty={!hasCaloriesChart}>
+            <>
+              <p className="muted small chart-inline-hint">
+                Same scale (kcal): food logged in vs active energy out per day.
+              </p>
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={series} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+                  <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
+                  <YAxis tick={AXIS_TICK} width={48} axisLine={false} tickLine={false} />
+                  <Tooltip {...TOOLTIP} />
+                  <Line
+                    type="monotone"
+                    dataKey="calories"
+                    name="Intake (kcal)"
+                    stroke={COLORS.calories}
+                    strokeWidth={2.5}
+                    dot={{ r: 3, fill: COLORS.calories, strokeWidth: 0 }}
+                    activeDot={{ r: 5 }}
+                    connectNulls
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="caloriesBurned"
+                    name="Burned (kcal)"
+                    stroke={COLORS.caloriesBurn}
+                    strokeWidth={2.5}
+                    dot={{ r: 3, fill: COLORS.caloriesBurn, strokeWidth: 0 }}
+                    activeDot={{ r: 5 }}
+                    connectNulls
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </>
           </ChartShell>
 
-          <ChartShell title="Calories burned" empty={!hasCalBurned}>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
-                <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
-                <YAxis tick={AXIS_TICK} width={48} axisLine={false} tickLine={false} />
-                <Tooltip {...TOOLTIP} />
-                <Line
-                  type="monotone"
-                  dataKey="caloriesBurned"
-                  name="Burned (kcal)"
-                  stroke={COLORS.caloriesBurn}
-                  strokeWidth={2.5}
-                  dot={{ r: 3, fill: COLORS.caloriesBurn, strokeWidth: 0 }}
-                  activeDot={{ r: 5 }}
-                  connectNulls
-                />
-              </LineChart>
-            </ResponsiveContainer>
+          <ChartShell title="Net calories (deficit or surplus)" empty={!hasCalorieNet}>
+            <>
+              <p className="muted small chart-inline-hint">
+                Intake − burned. Below the line = calorie deficit; above = surplus.
+              </p>
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={series} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+                  <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
+                  <YAxis tick={AXIS_TICK} width={48} axisLine={false} tickLine={false} />
+                  <Tooltip {...TOOLTIP} />
+                  <ReferenceLine y={0} stroke="#52525b" strokeDasharray="4 4" />
+                  <Line
+                    type="monotone"
+                    dataKey="calorieNet"
+                    name="Net (kcal)"
+                    stroke={COLORS.calorieNet}
+                    strokeWidth={2.5}
+                    dot={{ r: 3, fill: COLORS.calorieNet, strokeWidth: 0 }}
+                    activeDot={{ r: 5 }}
+                    connectNulls
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </>
           </ChartShell>
         </div>
 
-        <ChartShell title="Net calories (intake − burn)" empty={!hasCalorieNet}>
+        <ChartShell title={`Protein intake vs minimum (${proteinGoal}g / day)`} empty={!hasProtein}>
           <>
-            <p className="muted small" style={{ marginBottom: "0.75rem" }}>
-              Below zero = deficit; above zero = surplus. Log both food kcal and burned kcal in your standup.
+            <p className="muted small chart-inline-hint">
+              Bars = protein you logged; dashed line = daily minimum target (set{" "}
+              <code className="code-inline">VITE_PROTEIN_GOAL_GRAMS</code> if not {proteinGoal}g). Carbs and fat are
+              not charted here.
             </p>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
                 <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
-                <YAxis tick={AXIS_TICK} width={48} axisLine={false} tickLine={false} />
-                <Tooltip {...TOOLTIP} />
-                <ReferenceLine y={0} stroke="#52525b" strokeDasharray="4 4" />
-                <Line
-                  type="monotone"
-                  dataKey="calorieNet"
-                  name="Net (kcal)"
-                  stroke={COLORS.calorieNet}
-                  strokeWidth={2.5}
-                  dot={{ r: 3, fill: COLORS.calorieNet, strokeWidth: 0 }}
-                  activeDot={{ r: 5 }}
-                  connectNulls
+                <YAxis tick={AXIS_TICK} width={44} axisLine={false} tickLine={false} />
+                <Tooltip {...BAR_TOOLTIP} />
+                <ReferenceLine
+                  y={proteinGoal}
+                  stroke="#71717a"
+                  strokeDasharray="5 5"
+                  label={{
+                    value: `Min ${proteinGoal}g`,
+                    fill: "#a1a1aa",
+                    fontSize: 11,
+                    position: "insideTopRight",
+                  }}
                 />
-              </LineChart>
+                <Bar dataKey="protein" name="Protein (g)" fill={COLORS.protein} maxBarSize={40} radius={[6, 6, 0, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           </>
-        </ChartShell>
-
-        <ChartShell title={`Protein (g) vs goal (${proteinGoal}g)`} empty={!hasProtein}>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
-              <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
-              <YAxis tick={AXIS_TICK} width={44} axisLine={false} tickLine={false} />
-              <Tooltip {...BAR_TOOLTIP} />
-              <ReferenceLine
-                y={proteinGoal}
-                stroke="#71717a"
-                strokeDasharray="5 5"
-                label={{
-                  value: `Goal ${proteinGoal}g`,
-                  fill: "#a1a1aa",
-                  fontSize: 11,
-                  position: "insideTopRight",
-                }}
-              />
-              <Bar dataKey="protein" name="Protein (g)" fill={COLORS.protein} maxBarSize={40} radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
         </ChartShell>
 
         <ChartShell title="Daily score (AI)" empty={!hasScore}>

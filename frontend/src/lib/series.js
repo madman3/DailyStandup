@@ -2,12 +2,12 @@
 export const CHART_WINDOW_DAYS = 7;
 
 const MONTH_LABEL = new Intl.DateTimeFormat("en-US", {
-  month: "short",
+  month: "long",
   day: "numeric",
   timeZone: "UTC",
 });
 
-/** X-axis labels like "May 5" (not MM-DD). */
+/** X-axis labels like "May 5" (not MM-DD). Uses full month name. */
 export function formatChartAxisLabel(ymd) {
   const parts = String(ymd || "").split("-").map(Number);
   const y = parts[0];
