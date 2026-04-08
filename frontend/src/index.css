@@ -183,18 +183,16 @@ code {
   margin-bottom: 1.25rem;
 }
 
-.metric-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.1rem 1.2rem;
-  box-shadow: var(--shadow);
-  transition: border-color 0.15s ease, background 0.15s ease;
+/* Top metrics: flat typography — no card chrome (avoids looking like buttons). */
+.metric-stat {
+  padding: 0.35rem 0;
+  min-width: 0;
 }
 
-.metric-card:hover {
-  border-color: var(--border-bright);
-  background: var(--surface-hover);
+.metric-stat .metric-value {
+  font-size: 1.45rem;
+  font-weight: 650;
+  letter-spacing: -0.04em;
 }
 
 .metric-label {
@@ -367,6 +365,19 @@ code {
   max-width: 40rem;
 }
 
+.chart-row-split {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+@media (min-width: 900px) {
+  .chart-row-split {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .charts-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -398,6 +409,45 @@ code {
 .chart-wrap {
   width: 100%;
   min-height: 240px;
+}
+
+.contribution-hint {
+  margin: 0 0 0.75rem;
+  line-height: 1.4;
+}
+
+.contribution-grid-outer {
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.contribution-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 11px);
+  grid-auto-columns: 11px;
+  gap: 3px;
+  width: max-content;
+}
+
+.contribution-cell {
+  border-radius: 2px;
+}
+
+.contribution-cell--muted {
+  background: rgba(24, 24, 27, 0.45);
+  pointer-events: none;
+}
+
+.contribution-cell--off {
+  background: #18181b;
+  box-shadow: inset 0 0 0 1px rgba(63, 63, 70, 0.6);
+}
+
+.contribution-cell--on {
+  background: #22c55e;
+  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.45);
 }
 
 .chart-empty {

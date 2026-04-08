@@ -2,24 +2,35 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { CHART_WINDOW_DAYS, daysToSeries, latestDayEntry } from "../lib/series";
+import { proteinGoalGrams } from "../lib/goals.js";
+import {
+  buildGoalsMonthGrid,
+  buildWorkoutMonthGrid,
+  CHART_WINDOW_DAYS,
+  daysToSeries,
+  formatChartAxisLabel,
+  latestDayEntry,
+} from "../lib/series";
 
 const COLORS = {
   score: "#818cf8",
   sleep: "#38bdf8",
   steps: "#4ade80",
+  jobs: "#fbbf24",
   protein: "#c084fc",
   carbs: "#fb923c",
   fat: "#f472b6",
   calories: "#94a3b8",
+  caloriesBurn: "#f97316",
+  calorieNet: "#a78bfa",
 };
 
 const CHART_GRID = "#27272a";
@@ -43,7 +54,7 @@ const BAR_TOOLTIP = {
 
 function MetricCard({ label, value, unit, sub }) {
   return (
-    <div className="metric-card">
+    <div className="metric-stat">
       <div className="metric-label">{label}</div>
       <div className="metric-value">
         {value != null && value !== "" ? value : "—"}
@@ -69,7 +80,40 @@ function ChartShell({ title, children, empty }) {
   );
 }
 
+function ContributionMonthChart({ title, subtitle, columns }) {
+  const flat = columns.flatMap((col) => col);
+  return (
+    <div className="chart-block">
+      <h3 className="chart-title">{title}</h3>
+      <p className="muted small contribution-hint">{subtitle}</p>
+      <div className="contribution-grid-outer">
+        <div
+          className="contribution-grid"
+          role="img"
+          aria-label={`${title} for ${flat.filter((c) => c.inMonth).length} days in view`}
+        >
+          {flat.map((cell) => {
+            const tip = cell.inMonth ? formatChartAxisLabel(cell.dateKey) : "";
+            let cls = "contribution-cell";
+            if (!cell.inMonth) cls += " contribution-cell--muted";
+            else if (cell.active) cls += " contribution-cell--on";
+            else cls += " contribution-cell--off";
+            return (
+              <div
+                key={cell.dateKey}
+                className={cls}
+                title={tip || undefined}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AnalyticsDashboard({ days, chartEndDate }) {
+  const proteinGoal = proteinGoalGrams();
   const series = daysToSeries(days, {
     endDateKey: chartEndDate,
     windowDays: CHART_WINDOW_DAYS,
@@ -80,27 +124,31 @@ export function AnalyticsDashboard({ days, chartEndDate }) {
       r.dailyScore != null ||
       r.sleepHours != null ||
       r.steps != null ||
+      r.jobsApplied != null ||
       r.protein != null ||
       r.carbs != null ||
-      r.fat != null
+      r.fat != null ||
+      r.calories != null ||
+      r.caloriesBurned != null
   );
 
   const hasScore = series.some((r) => r.dailyScore != null);
   const hasSleep = series.some((r) => r.sleepHours != null);
   const hasSteps = series.some((r) => r.steps != null);
-  const hasMacros = series.some(
-    (r) => r.protein != null || r.carbs != null || r.fat != null || r.calories != null
-  );
+  const hasJobs = series.some((r) => r.jobsApplied != null);
+  const hasCalIntake = series.some((r) => r.calories != null);
+  const hasCalBurned = series.some((r) => r.caloriesBurned != null);
+  const hasCalorieNet = series.some((r) => r.calorieNet != null);
+  const hasProtein = series.some((r) => r.protein != null);
+
+  const workoutGrid = chartEndDate ? buildWorkoutMonthGrid(chartEndDate, days || {}) : { title: "", columns: [] };
+  const goalsGrid = chartEndDate
+    ? buildGoalsMonthGrid(chartEndDate, days || {}, proteinGoal)
+    : { title: "", columns: [] };
 
   return (
     <div className="analytics">
       <section className="metrics-row">
-        <MetricCard
-          label="Daily score"
-          value={latest?.dailyScore}
-          unit="/100"
-          sub="AI estimate from your messages"
-        />
         <MetricCard label="Sleep" value={latest?.sleepHours} unit="h" />
         <MetricCard
           label="Steps"
@@ -108,10 +156,36 @@ export function AnalyticsDashboard({ days, chartEndDate }) {
           unit=""
         />
         <MetricCard
+          label="Jobs applied (today)"
+          value={latest?.jobsApplied != null ? String(latest.jobsApplied) : null}
+          unit=""
+          sub={latest?.jobsApplied != null ? undefined : "Log applications in standup"}
+        />
+        <MetricCard
           label="Workout"
           value={latest?.workout}
           unit=""
           sub={latest?.workout ? undefined : "Log in Telegram"}
+        />
+        {latest?.calorieNet != null && (
+          <MetricCard
+            label="Net kcal (today)"
+            value={latest.calorieNet > 0 ? `+${latest.calorieNet}` : String(latest.calorieNet)}
+            unit=""
+            sub={
+              latest.calorieNet < 0
+                ? "Deficit (intake − burn)"
+                : latest.calorieNet > 0
+                  ? "Surplus"
+                  : "Maintenance"
+            }
+          />
+        )}
+        <MetricCard
+          label="Daily score"
+          value={latest?.dailyScore}
+          unit="/100"
+          sub="AI estimate from your messages"
         />
       </section>
 
@@ -134,26 +208,21 @@ export function AnalyticsDashboard({ days, chartEndDate }) {
       </p>
 
       <div className="charts-grid">
-        <ChartShell title="Score trend" empty={!hasScore}>
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
-              <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
-              <YAxis domain={[0, 100]} tick={AXIS_TICK} width={36} axisLine={false} tickLine={false} />
-              <Tooltip {...TOOLTIP} />
-              <Line
-                type="monotone"
-                dataKey="dailyScore"
-                name="Score"
-                stroke={COLORS.score}
-                strokeWidth={2.5}
-                dot={{ r: 3, fill: COLORS.score, strokeWidth: 0 }}
-                activeDot={{ r: 5 }}
-                connectNulls
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartShell>
+        {workoutGrid.columns.length > 0 && (
+          <ContributionMonthChart
+            title={`Workouts · ${workoutGrid.title}`}
+            subtitle="Green = logged a workout (rest/skip days stay dark)."
+            columns={workoutGrid.columns}
+          />
+        )}
+
+        {goalsGrid.columns.length > 0 && (
+          <ContributionMonthChart
+            title={`Protein + deficit · ${goalsGrid.title}`}
+            subtitle={`Green = protein ≥ ${proteinGoal}g and net calories below zero (same day).`}
+            columns={goalsGrid.columns}
+          />
+        )}
 
         <ChartShell title="Sleep (hours)" empty={!hasSleep}>
           <ResponsiveContainer width="100%" height={240}>
@@ -188,35 +257,132 @@ export function AnalyticsDashboard({ days, chartEndDate }) {
           </ResponsiveContainer>
         </ChartShell>
 
-        <ChartShell title="Macros (g)" empty={!hasMacros}>
+        <ChartShell title="Jobs applied" empty={!hasJobs}>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+              <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
+              <YAxis tick={AXIS_TICK} width={44} axisLine={false} tickLine={false} allowDecimals={false} />
+              <Tooltip {...BAR_TOOLTIP} />
+              <Bar
+                dataKey="jobsApplied"
+                name="Jobs applied"
+                fill={COLORS.jobs}
+                radius={[6, 6, 0, 0]}
+                maxBarSize={48}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartShell>
+
+        <div className="chart-row-split">
+          <ChartShell title="Calorie intake (food)" empty={!hasCalIntake}>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+                <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
+                <YAxis tick={AXIS_TICK} width={48} axisLine={false} tickLine={false} />
+                <Tooltip {...TOOLTIP} />
+                <Line
+                  type="monotone"
+                  dataKey="calories"
+                  name="Intake (kcal)"
+                  stroke={COLORS.calories}
+                  strokeWidth={2.5}
+                  dot={{ r: 3, fill: COLORS.calories, strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
+                  connectNulls
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartShell>
+
+          <ChartShell title="Calories burned" empty={!hasCalBurned}>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+                <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
+                <YAxis tick={AXIS_TICK} width={48} axisLine={false} tickLine={false} />
+                <Tooltip {...TOOLTIP} />
+                <Line
+                  type="monotone"
+                  dataKey="caloriesBurned"
+                  name="Burned (kcal)"
+                  stroke={COLORS.caloriesBurn}
+                  strokeWidth={2.5}
+                  dot={{ r: 3, fill: COLORS.caloriesBurn, strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
+                  connectNulls
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartShell>
+        </div>
+
+        <ChartShell title="Net calories (intake − burn)" empty={!hasCalorieNet}>
+          <>
+            <p className="muted small" style={{ marginBottom: "0.75rem" }}>
+              Below zero = deficit; above zero = surplus. Log both food kcal and burned kcal in your standup.
+            </p>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+                <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
+                <YAxis tick={AXIS_TICK} width={48} axisLine={false} tickLine={false} />
+                <Tooltip {...TOOLTIP} />
+                <ReferenceLine y={0} stroke="#52525b" strokeDasharray="4 4" />
+                <Line
+                  type="monotone"
+                  dataKey="calorieNet"
+                  name="Net (kcal)"
+                  stroke={COLORS.calorieNet}
+                  strokeWidth={2.5}
+                  dot={{ r: 3, fill: COLORS.calorieNet, strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
+                  connectNulls
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </>
+        </ChartShell>
+
+        <ChartShell title={`Protein (g) vs goal (${proteinGoal}g)`} empty={!hasProtein}>
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
               <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
               <YAxis tick={AXIS_TICK} width={44} axisLine={false} tickLine={false} />
               <Tooltip {...BAR_TOOLTIP} />
-              <Legend wrapperStyle={{ color: "#a1a1aa", fontSize: 12, paddingTop: 8 }} />
-              <Bar dataKey="protein" name="Protein (g)" fill={COLORS.protein} maxBarSize={28} radius={[4, 4, 0, 0]} />
-              <Bar dataKey="carbs" name="Carbs (g)" fill={COLORS.carbs} maxBarSize={28} radius={[4, 4, 0, 0]} />
-              <Bar dataKey="fat" name="Fat (g)" fill={COLORS.fat} maxBarSize={28} radius={[4, 4, 0, 0]} />
+              <ReferenceLine
+                y={proteinGoal}
+                stroke="#71717a"
+                strokeDasharray="5 5"
+                label={{
+                  value: `Goal ${proteinGoal}g`,
+                  fill: "#a1a1aa",
+                  fontSize: 11,
+                  position: "insideTopRight",
+                }}
+              />
+              <Bar dataKey="protein" name="Protein (g)" fill={COLORS.protein} maxBarSize={40} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartShell>
 
-        <ChartShell title="Calories (if logged)" empty={!series.some((r) => r.calories != null)}>
-          <ResponsiveContainer width="100%" height={220}>
+        <ChartShell title="Daily score (AI)" empty={!hasScore}>
+          <ResponsiveContainer width="100%" height={240}>
             <LineChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
               <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
-              <YAxis tick={AXIS_TICK} width={48} axisLine={false} tickLine={false} />
+              <YAxis domain={[0, 100]} tick={AXIS_TICK} width={36} axisLine={false} tickLine={false} />
               <Tooltip {...TOOLTIP} />
               <Line
                 type="monotone"
-                dataKey="calories"
-                name="Calories"
-                stroke={COLORS.calories}
+                dataKey="dailyScore"
+                name="Score"
+                stroke={COLORS.score}
                 strokeWidth={2.5}
-                dot={{ r: 3, fill: COLORS.calories, strokeWidth: 0 }}
+                dot={{ r: 3, fill: COLORS.score, strokeWidth: 0 }}
                 activeDot={{ r: 5 }}
                 connectNulls
               />

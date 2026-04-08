@@ -11,13 +11,17 @@ Return ONLY valid JSON with this exact shape (no markdown, no explanation):
 {
   "sleepHours": number | null,
   "steps": number | null,
+  "jobsApplied": number | null,
   "workout": string | null,
+  "caloriesBurned": number | null,
   "macros": { "protein": number | null, "carbs": number | null, "fat": number | null, "calories": number | null },
   "metricsByDate": {
     "YYYY-MM-DD": {
       "sleepHours": number | null,
       "steps": number | null,
+      "jobsApplied": number | null,
       "workout": string | null,
+      "caloriesBurned": number | null,
       "macros": { "protein": number | null, "carbs": number | null, "fat": number | null, "calories": number | null },
       "dailyScore": number | null,
       "coachingInsight": string | null
@@ -43,7 +47,9 @@ Rules:
 - taskItems: each distinct task the user mentioned for the future / backlog (not things already done unless they imply follow-up work).
 - Eisenhower-style: "important" = high impact or strategic; "urgent" = time-sensitive or must happen very soon; "when" = deadline date YYYY-MM-DD if they gave one or you can infer a specific date.
 - needsClarification: true if you are not confident about important AND urgent AND when for this task (you would ask 1–2 follow-up questions). false if the message already makes priority clear enough.
+- jobsApplied: count of job applications submitted that day (integer ≥ 0), or null if not mentioned.
 - workout: short phrase like "skipped", "legs day", "30 min run", or null.
+- macros.calories: food intake / eaten (kcal). caloriesBurned: active energy or exercise calories burned that day (kcal out). If the user only gives net or TDEE, put intake in macros.calories and estimate or null for burned unless stated.
 - dailyScore: integer 0-100 summarizing the day described, or null if impossible to infer.
 - coachingInsight: one short sentence of encouragement or advice, or null.
 - Numbers must be JSON numbers, not strings.`;
@@ -120,7 +126,9 @@ export function normalizeDayMetricsPartial(raw) {
   return {
     sleepHours: numOrNull(raw.sleepHours),
     steps: numOrNull(raw.steps),
+    jobsApplied: numOrNull(raw.jobsApplied),
     workout: strOrNull(raw.workout),
+    caloriesBurned: numOrNull(raw.caloriesBurned),
     macros: normalizeMacros(m),
     dailyScore: score,
     coachingInsight: strOrNull(raw.coachingInsight),
@@ -132,12 +140,14 @@ function dayHasAnyMetric(p) {
   if (
     p.sleepHours != null ||
     p.steps != null ||
+    p.jobsApplied != null ||
     p.workout != null ||
     p.dailyScore != null ||
     (p.coachingInsight && String(p.coachingInsight).trim())
   ) {
     return true;
   }
+  if (p.caloriesBurned != null) return true;
   const m = p.macros || {};
   return [m.protein, m.carbs, m.fat, m.calories].some((x) => x != null);
 }
@@ -173,7 +183,9 @@ export function buildPerDayPatches(extracted, primaryDateKey) {
   const top = {
     sleepHours: extracted.sleepHours,
     steps: extracted.steps,
+    jobsApplied: extracted.jobsApplied,
     workout: extracted.workout,
+    caloriesBurned: extracted.caloriesBurned,
     macros: extracted.macros,
     dailyScore: extracted.dailyScore,
     coachingInsight: extracted.coachingInsight,
@@ -191,7 +203,15 @@ export function buildPerDayPatches(extracted, primaryDateKey) {
     }
 
     if (dk === primaryDateKey) {
-      for (const field of ["sleepHours", "steps", "workout", "dailyScore", "coachingInsight"]) {
+      for (const field of [
+        "sleepHours",
+        "steps",
+        "jobsApplied",
+        "workout",
+        "dailyScore",
+        "coachingInsight",
+        "caloriesBurned",
+      ]) {
         const tv = top[field];
         if (tv != null && tv !== "" && (patch[field] == null || patch[field] === undefined)) {
           patch[field] = tv;
@@ -233,7 +253,9 @@ export function normalizeExtractedPatch(raw) {
   return {
     sleepHours: numOrNull(raw.sleepHours),
     steps: numOrNull(raw.steps),
+    jobsApplied: numOrNull(raw.jobsApplied),
     workout: strOrNull(raw.workout),
+    caloriesBurned: numOrNull(raw.caloriesBurned),
     macros: normalizeMacros(m),
     metricsByDate: normalizeMetricsByDate(raw.metricsByDate),
     tasks,

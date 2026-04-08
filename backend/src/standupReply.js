@@ -51,15 +51,27 @@ function dayBits(patch) {
   if (!patch || typeof patch !== "object") return [];
   const b = [];
   if (patch.steps != null) b.push(`${Number(patch.steps).toLocaleString()} steps`);
+  if (patch.jobsApplied != null) b.push(`${patch.jobsApplied} job${patch.jobsApplied === 1 ? "" : "s"} applied`);
   if (patch.sleepHours != null) b.push(`${patch.sleepHours}h sleep`);
   if (patch.workout) b.push(`workout: ${patch.workout}`);
   if (patch.dailyScore != null) b.push(`score ${patch.dailyScore}/100`);
   const m = patch.macros || {};
+  if (m.calories != null) b.push(`intake ${m.calories} kcal`);
+  if (patch.caloriesBurned != null) b.push(`burned ${patch.caloriesBurned} kcal`);
+  if (m.calories != null && patch.caloriesBurned != null) {
+    const net = m.calories - patch.caloriesBurned;
+    b.push(
+      net < 0
+        ? `net ${net} kcal (deficit)`
+        : net > 0
+          ? `net +${net} kcal (surplus)`
+          : "net 0 kcal"
+    );
+  }
   const mx = [];
   if (m.protein != null) mx.push(`protein ${m.protein}g`);
   if (m.carbs != null) mx.push(`carbs ${m.carbs}g`);
   if (m.fat != null) mx.push(`fat ${m.fat}g`);
-  if (m.calories != null) mx.push(`${m.calories} kcal`);
   if (mx.length) b.push(mx.join(", "));
   return b;
 }
