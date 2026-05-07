@@ -9,6 +9,13 @@
     "start": "npm run start --workspace=backend",
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
-    "dev": "npm run dev:backend & npm run dev:frontend"
+    "dev": "npm run dev:backend & npm run dev:frontend",
+    "fly:launch": "npm run fly:launch --workspace=backend",
+    "fly:deploy": "npm run fly:deploy --workspace=backend",
+    "fly:status": "npm run fly:status --workspace=backend",
+    "fly:logs": "npm run fly:logs --workspace=backend",
+    "fly:set-webhook": "npm run fly:set-webhook --workspace=backend",
+    "migrate:sqlite-to-pg": "npm run migrate:sqlite-to-pg --workspace=backend",
+    "jobs:sync": "npm run jobs:sync --workspace=backend"
   }
 }

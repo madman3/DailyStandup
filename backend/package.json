@@ -8,12 +8,24 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "register-webhook": "node scripts/set-webhook.js"
+    "register-webhook": "node scripts/set-webhook.js",
+    "migrate:sqlite-to-pg": "node scripts/migrate-sqlite-to-postgres.js",
+    "jobs:sync": "node scripts/trigger-jobs-sync.js",
+    "fly:launch": "fly launch --no-deploy --yes --copy-config --no-db --no-github-workflow --no-redis --no-object-storage",
+    "fly:deploy": "fly deploy",
+    "fly:status": "fly status",
+    "fly:logs": "fly logs",
+    "fly:set-webhook": "fly ssh console -C \"node /app/scripts/set-webhook.js\""
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
+    "better-sqlite3": "^11.10.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.21.0"
+    "express": "^4.21.0",
+    "express-session": "^1.18.1",
+    "googleapis": "^144.0.0",
+    "node-cron": "^3.0.3",
+    "pg": "^8.20.0"
   }
 }

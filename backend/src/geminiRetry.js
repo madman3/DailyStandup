@@ -19,9 +19,25 @@ export function isRateLimitError(err) {
   return (
     msg.includes("429") ||
     msg.includes("Too Many Requests") ||
-    msg.includes("quota") ||
     msg.includes("RESOURCE_EXHAUSTED")
   );
+}
+
+/**
+ * Daily / billing quota — retrying the same hour won't help. Try another model once, then stop.
+ * Do not treat every429 as this; use isRateLimitError for short backoff retries.
+ */
+export function isQuotaExhaustedError(err) {
+  const msg = String(err?.message ?? err).toLowerCase();
+  if (msg.includes("resource exhausted") && msg.includes("quota")) return true;
+  if (msg.includes("quota exceeded")) return true;
+  if (msg.includes("exceeded your") && msg.includes("quota")) return true;
+  if (msg.includes("generate_requests") || msg.includes("generatecontent")) {
+    if (msg.includes("per_day") || msg.includes("perday") || msg.includes("limit")) return true;
+  }
+  if (msg.includes("billing") && (msg.includes("disabled") || msg.includes("not enabled"))) return true;
+  if (msg.includes("limit: 0")) return true;
+  return false;
 }
 
 export function isModelNotFoundError(err) {

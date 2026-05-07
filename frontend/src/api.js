@@ -1,6 +1,6 @@
 /**
  * In dev, VITE_API_URL is unset → same-origin `/api/...` (Vite proxy to localhost:3001).
- * In production (Vercel), set VITE_API_URL to your Railway URL, e.g. https://xxx.up.railway.app
+ * Set VITE_API_URL in repo-root `.env` (or hosting env) to your API base, e.g. https://xxx.fly.dev
  */
 export function apiUrl(path) {
   const base = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");

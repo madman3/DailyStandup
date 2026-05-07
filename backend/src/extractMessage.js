@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   isModelNotFoundError,
+  isQuotaExhaustedError,
   isRateLimitError,
   rateLimitWaitMs,
   sleep,
@@ -23,8 +24,7 @@ Return ONLY valid JSON with this exact shape (no markdown, no explanation):
       "workout": string | null,
       "caloriesBurned": number | null,
       "macros": { "protein": number | null, "carbs": number | null, "fat": number | null, "calories": number | null },
-      "dailyScore": number | null,
-      "coachingInsight": string | null
+      "dailyScore": number | null
     }
   },
   "taskItems": [
@@ -36,8 +36,7 @@ Return ONLY valid JSON with this exact shape (no markdown, no explanation):
       "needsClarification": boolean
     }
   ],
-  "dailyScore": number | null,
-  "coachingInsight": string | null
+  "dailyScore": number | null
 }
 Rules:
 - CRITICAL — Multiple dates: If the user mentions different metrics for different days (e.g. "2880 steps today and 11300 on Apr 4" or "yesterday 8k steps"), you MUST put each metric under the correct calendar key inside metricsByDate. Use one object per date (YYYY-MM-DD). Do NOT put every number under "today" only.
@@ -51,7 +50,6 @@ Rules:
 - workout: short phrase like "skipped", "legs day", "30 min run", or null.
 - macros.calories: food intake / eaten (kcal). caloriesBurned: active energy or exercise calories burned that day (kcal out). If the user only gives net or TDEE, put intake in macros.calories and estimate or null for burned unless stated.
 - dailyScore: integer 0-100 summarizing the day described, or null if impossible to infer.
-- coachingInsight: one short sentence of encouragement or advice, or null.
 - Numbers must be JSON numbers, not strings.`;
 
 function numOrNull(v) {
@@ -131,7 +129,6 @@ export function normalizeDayMetricsPartial(raw) {
     caloriesBurned: numOrNull(raw.caloriesBurned),
     macros: normalizeMacros(m),
     dailyScore: score,
-    coachingInsight: strOrNull(raw.coachingInsight),
   };
 }
 
@@ -142,8 +139,7 @@ function dayHasAnyMetric(p) {
     p.steps != null ||
     p.jobsApplied != null ||
     p.workout != null ||
-    p.dailyScore != null ||
-    (p.coachingInsight && String(p.coachingInsight).trim())
+    p.dailyScore != null
   ) {
     return true;
   }
@@ -177,7 +173,8 @@ export function buildPerDayPatches(extracted, primaryDateKey) {
   const normalizedDays = {};
   for (const [dk, val] of Object.entries(byDate)) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) continue;
-    if (val && typeof val === "object" && dayHasAnyMetric(val)) normalizedDays[dk] = val;
+    const p = normalizeDayMetricsPartial(val);
+    if (dayHasAnyMetric(p)) normalizedDays[dk] = p;
   }
 
   const top = {
@@ -188,7 +185,6 @@ export function buildPerDayPatches(extracted, primaryDateKey) {
     caloriesBurned: extracted.caloriesBurned,
     macros: extracted.macros,
     dailyScore: extracted.dailyScore,
-    coachingInsight: extracted.coachingInsight,
   };
 
   const dates = new Set([primaryDateKey, ...Object.keys(normalizedDays)]);
@@ -209,7 +205,6 @@ export function buildPerDayPatches(extracted, primaryDateKey) {
         "jobsApplied",
         "workout",
         "dailyScore",
-        "coachingInsight",
         "caloriesBurned",
       ]) {
         const tv = top[field];
@@ -261,7 +256,6 @@ export function normalizeExtractedPatch(raw) {
     tasks,
     taskItems,
     dailyScore: score,
-    coachingInsight: strOrNull(raw.coachingInsight),
   };
 }
 
@@ -295,7 +289,8 @@ export async function extractStandupFromMessage(userText, calendarTodayKey) {
       },
     });
 
-    for (let attempt = 1; attempt <= 5; attempt++) {
+    const max429Attempts = 3;
+    for (let attempt = 1; attempt <= max429Attempts; attempt++) {
       try {
         const result = await model.generateContent(prompt);
         const text = result.response.text();
@@ -309,8 +304,14 @@ export async function extractStandupFromMessage(userText, calendarTodayKey) {
         if (isModelNotFoundError(err) && envModel) {
           throw err;
         }
+        if (isQuotaExhaustedError(err)) {
+          if (!envModel) {
+            continue modelLoop;
+          }
+          throw err;
+        }
         if (isRateLimitError(err)) {
-          if (attempt < 5) {
+          if (attempt < max429Attempts) {
             await sleep(rateLimitWaitMs(err, attempt));
             continue;
           }

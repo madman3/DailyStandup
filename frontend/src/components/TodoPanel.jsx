@@ -13,6 +13,7 @@ export function TodoPanel({ todos, todayKey, accomplishments, onComplete }) {
     try {
       const r = await fetch(apiUrl(`/api/todos/${encodeURIComponent(id)}/complete`), {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dateKey: todayKey }),
       });

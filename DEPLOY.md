@@ -1,48 +1,48 @@
-# Deploy: Railway (API) + Vercel (UI)
+# Deploy: Fly.io (API) + Vercel (UI)
 
-## Bitbucket vs Railway
+## 1. Backend — Fly.io
 
-**Bitbucket** runs **`npm ci`** + quick checks only (see `bitbucket-pipelines.yml`). It does **not** deploy to Railway.
+1. **Deploy** from the repo root:
 
-**Railway** should use **GitHub** (`madman3/DailyStandup`): connect the repo in Railway, set **root directory** to **`backend`**, add env vars. Push to **GitHub** (or mirror from Bitbucket) to trigger deploys.
+   ```bash
+   npm run fly:deploy --workspace=backend
+   ```
 
-## 1. Backend — Railway
-
-1. Connect **Railway → Deploy from GitHub** → **`madman3/DailyStandup`**, root **`backend`** (or mirror Bitbucket → GitHub first).
-2. **New project → Deploy from repo → set root directory to `backend`** (important for a monorepo).
-3. **Variables** (same names as your local `.env`):
+2. **Secrets** (set via `fly secrets set …`):
 
    - `TELEGRAM_BOT_TOKEN`
    - `TELEGRAM_WEBHOOK_SECRET`
    - `GEMINI_API_KEY`
-   - Optional: `GEMINI_MODEL`
-   - Railway sets `PORT` automatically — do not hardcode it.
+   - `USER_TIMEZONE` (e.g. `America/Los_Angeles`)
+   - `DATABASE_URL` (Supabase pooler URL with `sslmode=require`)
+   - Optional: `GEMINI_MODEL`, `GOOGLE_SHEET_ID`, `GOOGLE_SHEET_RANGE`, `GOOGLE_SERVICE_ACCOUNT_JSON_B64`
 
-4. Deploy. Copy the **public HTTPS URL** (e.g. `https://daily-standup-production.up.railway.app`).
+3. `PORT=3001` is set in `fly.toml [env]` — no need to add it as a secret.
 
-5. **Register Telegram webhook** to point at Railway (not ngrok):
+4. **Register Telegram webhook** (once, after first deploy):
 
-   - In your **local** project root `.env`, set  
-     `PUBLIC_WEBHOOK_URL=https://YOUR-RAILWAY-URL`  
-     (no path, no trailing slash).
-   - Run:  
-     `npm run register-webhook --workspace=backend`
+   ```bash
+   npm run fly:set-webhook --workspace=backend
+   ```
 
-6. **State file:** `state.json` lives on the container disk. It can **reset on redeploy** unless you add a Railway **volume** and mount it where `backend/state.json` is written. For a hackathon, ephemeral state is often fine.
+   Or locally:
+
+   ```bash
+   PUBLIC_WEBHOOK_URL=https://<your-app>.fly.dev npm run register-webhook --workspace=backend
+   ```
 
 ## 2. Frontend — Vercel
 
 1. **New project → import repo → set root directory to `frontend`** (Framework: Vite).
 2. **Environment variable** (Production):
 
-   - `VITE_API_URL` = your Railway URL, e.g. `https://YOUR-RAILWAY-URL.up.railway.app`  
-     (no trailing slash)
+   - `VITE_API_URL` = `https://<your-app>.fly.dev` (no trailing slash)
 
 3. Deploy. Open the Vercel URL; the app will call `VITE_API_URL` for `/api/state` and `/api/telegram-status`.
 
 ## 3. CORS
 
-The API uses permissive CORS so the Vercel origin can call Railway. If you lock this down later, restrict `cors()` to your Vercel domain.
+The API uses permissive CORS so the Vercel origin can call Fly. If you lock this down later, restrict `cors()` to your Vercel domain.
 
 ## 4. Local dev (unchanged)
 

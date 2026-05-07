@@ -1,5 +1,5 @@
-# Optional: deploy backend from Railway UI (GitHub mirror) or docker build.
-# Railway sets PORT; app reads process.env.PORT.
+# Backend Docker image — deployed to Fly.io via fly deploy.
+# PORT is set in fly.toml [env]; app reads process.env.PORT ?? 3001.
 
 FROM node:20-alpine
 WORKDIR /app

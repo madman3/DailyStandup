@@ -202,13 +202,6 @@ export function AnalyticsDashboard({ days, chartEndDate }) {
         />
       </section>
 
-      {latest?.coachingInsight && (
-        <div className="insight-card">
-          <div className="insight-label">Coaching insight</div>
-          <p className="insight-text">{latest.coachingInsight}</p>
-        </div>
-      )}
-
       {!hasAnyPoint && (
         <p className="muted">
           Charts fill in as Gemini extracts sleep, steps, score, and macros from your standups.
@@ -216,8 +209,9 @@ export function AnalyticsDashboard({ days, chartEndDate }) {
       )}
 
       <p className="muted small chart-window-hint">
-        Trends show the last {CHART_WINDOW_DAYS} calendar days (ending today). Days without a log
-        appear as gaps.
+        Weekly line/bar charts use the last {CHART_WINDOW_DAYS} days (ending today). Month grids at the
+        top show the full calendar month — scroll down to see every section (sleep, steps, jobs,
+        calories, protein, daily score).
       </p>
 
       <div className="charts-grid">

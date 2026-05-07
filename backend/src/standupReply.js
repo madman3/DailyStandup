@@ -92,9 +92,6 @@ export function formatStandupAckSummary(extracted, perDay, primaryDateKey) {
     const titles = extracted.taskItems.map((t) => t.title).filter(Boolean).slice(0, 6);
     if (titles.length) lines.push(`• Tasks: ${titles.join("; ")}`);
   }
-  if (extracted?.coachingInsight) {
-    lines.push(`• ${String(extracted.coachingInsight).slice(0, 220)}`);
-  }
   if (lines.length === 0) {
     return `Logged (${primaryDateKey}). I didn’t catch numbers or tasks in that message — try adding steps, sleep, or macros.`;
   }

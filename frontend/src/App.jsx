@@ -10,20 +10,41 @@ export default function App() {
   const [err, setErr] = useState(null);
   const [lastFetch, setLastFetch] = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [needsAuth, setNeedsAuth] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [loginErr, setLoginErr] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       try {
-        const [stateRes, tgRes] = await Promise.all([
-          fetch(apiUrl("/api/state")),
-          fetch(apiUrl("/api/telegram-status")),
-        ]);
+        const stateRes = await fetch(apiUrl("/api/state"), { credentials: "include" });
+        if (stateRes.status === 401) {
+          if (!cancelled) {
+            setNeedsAuth(true);
+            setData(null);
+            setTelegram(null);
+            setErr(null);
+          }
+          return;
+        }
         if (!stateRes.ok) throw new Error(`state HTTP ${stateRes.status}`);
         const json = await stateRes.json();
+
+        const tgRes = await fetch(apiUrl("/api/telegram-status"), { credentials: "include" });
+        if (tgRes.status === 401) {
+          if (!cancelled) {
+            setNeedsAuth(true);
+            setData(null);
+            setTelegram(null);
+            setErr(null);
+          }
+          return;
+        }
         const tgJson = await tgRes.json();
         if (!cancelled) {
+          setNeedsAuth(false);
           setData(json);
           setTelegram(tgJson);
           setErr(null);
@@ -51,6 +72,58 @@ export default function App() {
   const tgResult = telegram?.result;
   const tgOk = telegram?.ok === true;
 
+  async function login(e) {
+    e?.preventDefault?.();
+    setLoginErr(null);
+    const password = passwordInput;
+    try {
+      const r = await fetch(apiUrl("/api/login"), {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const json = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setLoginErr(json.error || `Login failed (HTTP ${r.status})`);
+        return;
+      }
+      setPasswordInput("");
+      setNeedsAuth(false);
+      setRefreshTick((t) => t + 1);
+    } catch (err2) {
+      setLoginErr(err2 instanceof Error ? err2.message : "Login failed");
+    }
+  }
+
+  if (needsAuth) {
+    return (
+      <div className="app">
+        <header className="header">
+          <h1>Daily Standup</h1>
+          <p className="muted">Sign in to view your data.</p>
+        </header>
+        <section className="panel">
+          <h2 className="panel-title">Unlock dashboard</h2>
+          <form onSubmit={login} style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              placeholder="Password"
+              autoFocus
+              style={{ flex: 1 }}
+            />
+            <button type="submit" style={{ whiteSpace: "nowrap" }}>
+              Unlock
+            </button>
+          </form>
+          {loginErr && <div className="banner error" style={{ marginTop: "0.75rem" }}>{loginErr}</div>}
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <header className="header">
@@ -69,7 +142,7 @@ export default function App() {
       {err && (
         <div className="banner error">
           Cannot reach API: {err}. Local: run backend on port 3001. Production: set{" "}
-          <code>VITE_API_URL</code> to your Railway URL.
+          <code>VITE_API_URL</code> to your Fly.io URL.
         </div>
       )}
 
@@ -82,6 +155,33 @@ export default function App() {
           accomplishments={today?.accomplishments}
           onComplete={() => setRefreshTick((t) => t + 1)}
         />
+      )}
+
+      {data && Array.isArray(data.jobApplications) && data.jobApplications.length > 0 && (
+        <section className="panel">
+          <h2 className="panel-title">Job applications (Google Sheet)</h2>
+          <p className="muted small" style={{ marginBottom: "0.75rem" }}>
+            Synced from your sheet; backend refreshes hourly when configured.
+          </p>
+          <ul className="accomplishment-list" style={{ margin: 0 }}>
+            {data.jobApplications.map((j) => (
+              <li key={j.id} style={{ marginBottom: "0.5rem" }}>
+                <strong>{j.company || "—"}</strong>
+                {j.role ? ` · ${j.role}` : ""}
+                {j.status ? (
+                  <span className="pill" style={{ marginLeft: "0.35rem" }}>
+                    {j.status}
+                  </span>
+                ) : null}
+                {j.appliedDate ? (
+                  <span className="muted small" style={{ marginLeft: "0.35rem" }}>
+                    applied {j.appliedDate}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <section className="panel">

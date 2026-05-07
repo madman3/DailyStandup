@@ -1,12 +1,12 @@
-# Mirror Bitbucket → GitHub (for Railway)
+# Mirror Bitbucket → GitHub
 
-Railway connects to **GitHub**. This repo’s **primary remote** stays **Bitbucket** (`origin`). A second remote **`github`** points to:
+This repo's **primary remote** stays **Bitbucket** (`origin`). A second remote **`github`** points to:
 
 `git@github.com:madman3/DailyStandup.git`
 
 ## One-time on your machine
 
-1. **SSH keys** — Your Mac’s SSH key must be added to **both** [Bitbucket](https://bitbucket.org/account/settings/ssh-keys/) and [GitHub](https://github.com/settings/keys) (same key is fine).
+1. **SSH keys** — Your Mac's SSH key must be added to **both** [Bitbucket](https://bitbucket.org/account/settings/ssh-keys/) and [GitHub](https://github.com/settings/keys) (same key is fine).
 
 2. **Remote** (already added if you pulled latest):
 
@@ -24,7 +24,7 @@ Railway connects to **GitHub**. This repo’s **primary remote** stays **Bitbuck
 
 ## Ongoing sync (manual)
 
-After each change you’d normally push only to Bitbucket, push **both**:
+After each change you'd normally push only to Bitbucket, push **both**:
 
 ```bash
 git push origin master
@@ -55,8 +55,8 @@ If the mirror step fails with auth errors, regenerate the PAT and confirm the to
 
 ## Automatic sync (optional): Bitbucket UI mirror
 
-Some Bitbucket plans offer **Repository mirror** under **Repository settings**. You can add your GitHub repo URL with credentials per [Atlassian’s docs](https://support.atlassian.com/bitbucket-cloud/docs/use-repository-mirrors/). Use this **or** the pipeline mirror above, not both, unless you want double pushes.
+Some Bitbucket plans offer **Repository mirror** under **Repository settings**. You can add your GitHub repo URL with credentials per [Atlassian's docs](https://support.atlassian.com/bitbucket-cloud/docs/use-repository-mirrors/). Use this **or** the pipeline mirror above, not both, unless you want double pushes.
 
-## Railway
+## Fly.io
 
-In Railway: **New project → Deploy from GitHub repo** → choose **`madman3/DailyStandup`**, set **root directory** to **`backend`**, add env vars. After you mirror, Railway tracks **GitHub**; keep Bitbucket as your main workflow and sync when you want Railway to rebuild.
+Backend is deployed to Fly.io via `npm run fly:deploy --workspace=backend`. Pushing to GitHub does **not** auto-deploy; trigger deploys manually or wire a CI step.

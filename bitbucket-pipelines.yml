@@ -1,6 +1,6 @@
 # Bitbucket Pipelines
 # 1) CI: npm install check
-# 2) Mirror: push same commit to GitHub (Railway watches GitHub)
+# 2) Mirror: push same commit to GitHub
 #
 # Repository variables (Settings → Repository variables):
 #   GITHUB_MIRROR_TOKEN — Secured. GitHub classic PAT with repo scope (repo + push to madman3/DailyStandup).
