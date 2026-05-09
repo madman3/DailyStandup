@@ -35,7 +35,11 @@ import { sendTelegramMessage } from "./telegramSend.js";
 import {
   clearPendingFollowUp,
   completeTodo,
+  idLookupKey,
+  restoreTodoFromAccomplishment,
   mergeTodosFromExtraction,
+  moveTodoToQuadrant,
+  reorderTodosInQuadrant,
   setPendingFollowUp,
   updateTodoById,
 } from "./todos.js";
@@ -536,6 +540,90 @@ app.post("/api/health-sync", async (req, res) => {
   }
 });
 
+/**
+ * Restore from accomplishment using JSON body only (no todo id in URL).
+ * Literal path before `:id` routes — avoids proxies/static hosts mishandling `/api/todos/:uuid/restore`.
+ * Body: { id?: string, dateKey?: YYYY-MM-DD, title?: string, completedAt?: ISO string }
+ * Need `id` and/or both `title` + `completedAt`.
+ */
+app.post("/api/todos/restore-accomplishment", async (req, res) => {
+  const rawId = req.body?.id;
+  const id = typeof rawId === "string" ? rawId : rawId != null ? String(rawId) : "";
+  const pref =
+    typeof req.body?.dateKey === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.body.dateKey.trim())
+      ? req.body.dateKey.trim()
+      : undefined;
+  const hints = {
+    title: typeof req.body?.title === "string" ? req.body.title : undefined,
+    completedAt: typeof req.body?.completedAt === "string" ? req.body.completedAt : undefined,
+  };
+  const hasId = idLookupKey(id) != null;
+  const hasHints =
+    typeof hints.title === "string" &&
+    hints.title.trim() &&
+    typeof hints.completedAt === "string" &&
+    hints.completedAt.trim();
+  if (!hasId && !hasHints) {
+    return res.status(400).json({
+      error: "Provide accomplishment id and/or title + completedAt (ISO)",
+    });
+  }
+  try {
+    const result = await restoreTodoFromAccomplishment(id || undefined, pref, hints);
+    if (!result.ok) {
+      const code = result.error === "Accomplishment not found" ? 422 : 400;
+      return res.status(code).json({ ...result, reason: result.error });
+    }
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+/** Literal path before `:id` so it never collides with param routes on any proxy/router. */
+app.post("/api/todos/reorder", async (req, res) => {
+  const quadrant = req.body?.quadrant;
+  const orderedIds = req.body?.orderedIds;
+  if (
+    typeof quadrant !== "string" ||
+    !["priority", "schedule", "quick", "backlog", "unsorted"].includes(quadrant) ||
+    !Array.isArray(orderedIds) ||
+    !orderedIds.every((x) => typeof x === "string")
+  ) {
+    return res.status(400).json({ error: "Invalid body: quadrant + orderedIds[]" });
+  }
+  try {
+    const out = await reorderTodosInQuadrant(quadrant, orderedIds);
+    if (!out.ok) return res.status(400).json(out);
+    res.json(out);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+app.patch("/api/todos/:id", async (req, res) => {
+  const quadrant = req.body?.quadrant;
+  if (
+    typeof quadrant !== "string" ||
+    !["priority", "schedule", "quick", "backlog", "unsorted"].includes(quadrant)
+  ) {
+    return res.status(400).json({ error: "Invalid or missing quadrant" });
+  }
+  try {
+    const out = await moveTodoToQuadrant(req.params.id, quadrant);
+    if (!out.ok) {
+      const code = out.error === "Todo not found" ? 404 : 400;
+      return res.status(code).json(out);
+    }
+    res.json(out);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
 app.post("/api/todos/:id/complete", async (req, res) => {
   const { id } = req.params;
   const dk =
@@ -546,6 +634,30 @@ app.post("/api/todos/:id/complete", async (req, res) => {
     const result = await completeTodo(id, dk);
     if (!result.ok) {
       return res.status(404).json(result);
+    }
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+/** Body: optional { dateKey } — if omitted, finds accomplishment by id across days. */
+app.post("/api/todos/:id/restore", async (req, res) => {
+  const { id } = req.params;
+  const pref =
+    typeof req.body?.dateKey === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.body.dateKey.trim())
+      ? req.body.dateKey.trim()
+      : undefined;
+  const hints = {
+    title: typeof req.body?.title === "string" ? req.body.title : undefined,
+    completedAt: typeof req.body?.completedAt === "string" ? req.body.completedAt : undefined,
+  };
+  try {
+    const result = await restoreTodoFromAccomplishment(id, pref, hints);
+    if (!result.ok) {
+      const code = result.error === "Accomplishment not found" ? 422 : 400;
+      return res.status(code).json({ ...result, reason: result.error });
     }
     res.json(result);
   } catch (e) {

@@ -188,6 +188,10 @@ export function buildPerDayPatches(extracted, primaryDateKey) {
   };
 
   const dates = new Set([primaryDateKey, ...Object.keys(normalizedDays)]);
+  const hasExplicitNonPrimaryDates = Object.keys(normalizedDays).some(
+    (dk) => dk !== primaryDateKey
+  );
+  const hasExplicitPrimaryDate = Boolean(normalizedDays[primaryDateKey]);
   const out = {};
 
   for (const dk of dates) {
@@ -199,6 +203,11 @@ export function buildPerDayPatches(extracted, primaryDateKey) {
     }
 
     if (dk === primaryDateKey) {
+      // If LLM already mapped metrics to non-primary calendar days (e.g. "yesterday"),
+      // avoid copying undated top-level values onto "today" unless today's date is explicit.
+      const allowTopLevelBackfill =
+        !hasExplicitNonPrimaryDates || hasExplicitPrimaryDate;
+
       for (const field of [
         "sleepHours",
         "steps",
@@ -208,11 +217,16 @@ export function buildPerDayPatches(extracted, primaryDateKey) {
         "caloriesBurned",
       ]) {
         const tv = top[field];
-        if (tv != null && tv !== "" && (patch[field] == null || patch[field] === undefined)) {
+        if (
+          allowTopLevelBackfill &&
+          tv != null &&
+          tv !== "" &&
+          (patch[field] == null || patch[field] === undefined)
+        ) {
           patch[field] = tv;
         }
       }
-      if (top.macros) {
+      if (allowTopLevelBackfill && top.macros) {
         patch.macros = { ...(patch.macros || {}) };
         for (const [mk, mv] of Object.entries(top.macros)) {
           if (mv != null && mv !== undefined && patch.macros[mk] == null) {

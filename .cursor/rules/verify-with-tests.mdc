@@ -1,0 +1,14 @@
+---
+description: After code changes, run automated checks before marking work complete
+alwaysApply: true
+---
+
+# Verify changes with tests
+
+Before you tell the user a task is **done**, run whatever automated verification fits the change:
+
+1. **If the repo has a test script** (e.g. `npm test`, `pnpm test`, `pytest`), run it from the project root or the relevant workspace and fix failures.
+2. **If you added or fixed a feature** and there is no test yet, add a minimal test or script when practical (especially for bug fixes) so the behavior is locked in.
+3. **If tests are not applicable** (docs-only, config-only), say so briefly instead of skipping silently.
+
+Do not claim the feature works based only on reading code; use the test run (or an explicit manual check you executed in the terminal) as the gate before "done".

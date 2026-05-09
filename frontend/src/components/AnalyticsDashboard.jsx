@@ -60,6 +60,90 @@ const BAR_TOOLTIP = {
 };
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const JOBS_CHART_WINDOW_DAYS = 30;
+
+function dateKeyFromAppliedDate(raw, fallbackYear) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  const yFallback = Number(fallbackYear);
+
+  // YYYY/MM/DD
+  let m = s.match(/^(\d{4})[\/](\d{1,2})[\/](\d{1,2})$/);
+  if (m) {
+    const y = Number(m[1]);
+    const mm = Number(m[2]);
+    const dd = Number(m[3]);
+    if (y >= 1900 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    }
+  }
+
+  // MM/DD[/YYYY]
+  m = s.match(/^(\d{1,2})[\/](\d{1,2})(?:[\/](\d{4}))?$/);
+  if (m) {
+    const mm = Number(m[1]);
+    const dd = Number(m[2]);
+    const y = m[3] ? Number(m[3]) : yFallback;
+    if (y >= 1900 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    }
+  }
+
+  // Month name + day (optionally year): "May 8", "May 8, 2026"
+  m = s.match(/^([A-Za-z]+)\s+(\d{1,2})(?:,?\s+(\d{4}))?$/);
+  if (m) {
+    const mon = m[1].slice(0, 3).toLowerCase();
+    const monthMap = {
+      jan: 1,
+      feb: 2,
+      mar: 3,
+      apr: 4,
+      may: 5,
+      jun: 6,
+      jul: 7,
+      aug: 8,
+      sep: 9,
+      oct: 10,
+      nov: 11,
+      dec: 12,
+    };
+    const mm = monthMap[mon];
+    const dd = Number(m[2]);
+    const y = m[3] ? Number(m[3]) : yFallback;
+    if (mm && y >= 1900 && dd >= 1 && dd <= 31) {
+      return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    }
+  }
+
+  // Final fallback for fully qualified parseable strings.
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${mm}-${dd}`;
+}
+
+function mergeJobsAppliedFromSheet(series, jobApplications, endDateKey) {
+  const counts = new Map();
+  const fallbackYear = Number(String(endDateKey || "").slice(0, 4)) || new Date().getFullYear();
+  for (const row of Array.isArray(jobApplications) ? jobApplications : []) {
+    const key =
+      (typeof row?.appliedDateKey === "string" && /^\d{4}-\d{2}-\d{2}$/.test(row.appliedDateKey)
+        ? row.appliedDateKey
+        : null) || dateKeyFromAppliedDate(row?.appliedDate, fallbackYear);
+    if (!key) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return series.map((r) => {
+    const fromSheet = counts.get(r.date);
+    if (fromSheet != null) return { ...r, jobsApplied: fromSheet };
+    return r;
+  });
+}
 
 function MetricCard({ label, value, unit, sub }) {
   return (
@@ -72,6 +156,38 @@ function MetricCard({ label, value, unit, sub }) {
         )}
       </div>
       {sub && <div className="metric-sub muted small">{sub}</div>}
+    </div>
+  );
+}
+
+function arcPath(cx, cy, r, startDeg, endDeg) {
+  const toRad = (deg) => ((deg - 90) * Math.PI) / 180;
+  const x1 = cx + r * Math.cos(toRad(startDeg));
+  const y1 = cy + r * Math.sin(toRad(startDeg));
+  const x2 = cx + r * Math.cos(toRad(endDeg));
+  const y2 = cy + r * Math.sin(toRad(endDeg));
+  const largeArc = endDeg - startDeg > 180 ? 1 : 0;
+  return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`;
+}
+
+function ProteinGaugeMetric({ grams, goal = 110 }) {
+  const hasProtein = Number.isFinite(Number(grams));
+  const protein = hasProtein ? Number(grams) : 0;
+  const pct = goal > 0 ? (protein / goal) * 100 : 0;
+  const bounded = Math.max(0, Math.min(100, pct));
+  const sweep = 180 * (bounded / 100);
+  const shown = hasProtein ? `${Math.round(protein)}g` : "—";
+
+  return (
+    <div className="metric-stat metric-stat--protein">
+      <div className="metric-label">Protein</div>
+      <div className="protein-gauge" aria-label={`Protein consumed ${shown} out of ${goal}g goal`}>
+        <svg viewBox="0 0 200 120" role="img" aria-hidden="true">
+          <path className="protein-gauge__track" d={arcPath(100, 100, 72, 270, 90)} />
+          <path className="protein-gauge__fill" d={arcPath(100, 100, 72, 270, 270 + sweep)} />
+        </svg>
+        <div className="protein-gauge__value">{shown}</div>
+      </div>
     </div>
   );
 }
@@ -110,6 +226,7 @@ export function DashboardMetrics({ days, chartEndDate }) {
         unit="/100"
         sub="AI estimate from your messages"
       />
+      <ProteinGaugeMetric grams={latest?.protein} goal={110} />
     </section>
   );
 }
@@ -131,6 +248,15 @@ function ChartShell({ title, children, empty }) {
 function StreakHeatmapChart({ title, subtitle, columns }) {
   const flat = columns.flatMap((col) => col);
   const inMonthCount = flat.filter((c) => c.inMonth).length;
+  const inMonthCells = columns.flatMap((weekCol, weekIdx) =>
+    weekCol
+      .map((cell) => ({ ...cell, weekIdx }))
+      .filter((cell) => cell.inMonth)
+      .map((cell) => {
+        const d = new Date(`${cell.dateKey}T00:00:00Z`);
+        return { ...cell, dow: d.getUTCDay() };
+      })
+  );
 
   return (
     <div className="chart-block streak-heatmap-chart">
@@ -149,30 +275,21 @@ function StreakHeatmapChart({ title, subtitle, columns }) {
             className="streak-heatmap__cells"
             role="img"
             aria-label={`${title}, ${inMonthCount} days in month`}
+            style={{ "--streak-week-cols": String(columns.length) }}
           >
-            {columns.map((weekCol) =>
-              weekCol.map((cell) => {
-                const tip = cell.inMonth ? formatChartAxisLabel(cell.dateKey) : "";
-                const cls = cell.inMonth
-                  ? `streak-cell streak-cell--l${Math.max(1, Math.min(4, cell.level || 1))}`
-                  : "streak-cell streak-cell--pad";
-                return (
-                  <div key={cell.dateKey} className={cls} title={tip || undefined} />
-                );
-              })
-            )}
+            {inMonthCells.map((cell) => (
+              <div
+                key={cell.dateKey}
+                className={`streak-cell streak-cell--l${Math.max(1, Math.min(4, cell.level || 1))}`}
+                title={formatChartAxisLabel(cell.dateKey)}
+                style={{
+                  gridColumn: `${cell.weekIdx + 1}`,
+                  gridRow: `${cell.dow + 1}`,
+                }}
+              />
+            ))}
           </div>
         </div>
-      </div>
-      <div className="streak-heatmap__legend">
-        <span className="streak-heatmap__legend-label">Less</span>
-        <div className="streak-heatmap__legend-scale" aria-hidden="true">
-          <span className="streak-cell streak-cell--l1 streak-cell--legend" />
-          <span className="streak-cell streak-cell--l2 streak-cell--legend" />
-          <span className="streak-cell streak-cell--l3 streak-cell--legend" />
-          <span className="streak-cell streak-cell--l4 streak-cell--legend" />
-        </div>
-        <span className="streak-heatmap__legend-label">More</span>
       </div>
     </div>
   );
@@ -240,6 +357,11 @@ export function AnalyticsDashboard({
     endDateKey: chartEndDate,
     windowDays: CHART_WINDOW_DAYS,
   });
+  const jobsBaseSeries = daysToSeries(days, {
+    endDateKey: chartEndDate,
+    windowDays: JOBS_CHART_WINDOW_DAYS,
+  });
+  const jobsSeries = mergeJobsAppliedFromSheet(jobsBaseSeries, jobApplications, chartEndDate);
   const hasAnyPoint = series.some(
     (r) =>
       r.dailyScore != null ||
@@ -254,7 +376,7 @@ export function AnalyticsDashboard({
   const hasScore = series.some((r) => r.dailyScore != null);
   const hasSleep = series.some((r) => r.sleepHours != null);
   const hasSteps = series.some((r) => r.steps != null);
-  const hasJobs = series.some((r) => r.jobsApplied != null);
+  const hasJobs = jobsSeries.some((r) => r.jobsApplied != null);
   const hasCalIntake = series.some((r) => r.calories != null);
   const hasCalBurned = series.some((r) => r.caloriesBurned != null);
   const hasCalorieNet = series.some((r) => r.calorieNet != null);
@@ -463,13 +585,13 @@ export function AnalyticsDashboard({
       {showJobsCharts && (
         <>
           <p className="muted small chart-window-hint">
-            Weekly bar chart uses the last {CHART_WINDOW_DAYS} days (ending today). Sheet rows list every application
+            Jobs bar chart uses the last {JOBS_CHART_WINDOW_DAYS} days (ending today). Sheet rows list every application
             synced from Google.
           </p>
           <div className="charts-grid charts-grid--jobs">
             <ChartShell title="Jobs applied" empty={!hasJobs}>
               <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <BarChart data={jobsSeries} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
                   <XAxis dataKey="label" tick={AXIS_TICK} axisLine={{ stroke: CHART_GRID }} tickLine={false} />
                   <YAxis tick={AXIS_TICK} width={44} axisLine={false} tickLine={false} allowDecimals={false} />

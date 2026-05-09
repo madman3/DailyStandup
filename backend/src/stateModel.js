@@ -20,6 +20,26 @@ function normTitle(s) {
     .replace(/\s+/g, " ");
 }
 
+const EMPTY_TODO_SORT = {
+  priority: null,
+  schedule: null,
+  quick: null,
+  backlog: null,
+  unsorted: null,
+};
+
+function normalizeTodoRow(t) {
+  if (!t || typeof t !== "object") return t;
+  const row = { ...t };
+  const s = row.sortOrder && typeof row.sortOrder === "object" ? row.sortOrder : {};
+  row.sortOrder = { ...EMPTY_TODO_SORT, ...s };
+  for (const k of Object.keys(EMPTY_TODO_SORT)) {
+    const v = row.sortOrder[k];
+    row.sortOrder[k] = v == null || Number.isNaN(Number(v)) ? null : Number(v);
+  }
+  return row;
+}
+
 /** Ensure version + days exist (older or hand-edited state may omit them). */
 export function normalizeStateShape(state) {
   if (!state || typeof state !== "object") {
@@ -34,7 +54,7 @@ export function normalizeStateShape(state) {
       typeof state.days === "object" && state.days !== null && !Array.isArray(state.days)
         ? { ...state.days }
         : {},
-    todos: Array.isArray(state.todos) ? state.todos : [],
+    todos: Array.isArray(state.todos) ? state.todos.map(normalizeTodoRow) : [],
     pendingFollowUp:
       state.pendingFollowUp && typeof state.pendingFollowUp === "object"
         ? state.pendingFollowUp
@@ -70,6 +90,7 @@ export function migrateLegacyStateToV2(state) {
           sourceDay: dk,
           createdAt: new Date().toISOString(),
           followUpSent: false,
+          sortOrder: { priority: null, schedule: null, quick: null, backlog: null, unsorted: null },
         });
       }
     }

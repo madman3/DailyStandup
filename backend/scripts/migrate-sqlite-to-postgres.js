@@ -127,16 +127,12 @@ async function main() {
     }
 
     if (tableExistsSqlite(sqlite, "todos")) {
-      const rows = sqlite
-        .prepare(
-          `SELECT id, title, important, urgent, when_date, needs_clarification, status, source_day, created_at, follow_up_sent
-           FROM todos`
-        )
-        .all();
+      const rows = sqlite.prepare(`SELECT * FROM todos`).all();
       for (const r of rows) {
         await client.query(
-          `INSERT INTO todos (id, title, important, urgent, when_date, needs_clarification, status, source_day, created_at, follow_up_sent)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          `INSERT INTO todos (id, title, important, urgent, when_date, needs_clarification, status, source_day, created_at, follow_up_sent,
+                              ord_priority, ord_schedule, ord_quick, ord_backlog, ord_unsorted)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
           [
             r.id,
             r.title,
@@ -148,6 +144,11 @@ async function main() {
             r.source_day,
             r.created_at,
             r.follow_up_sent,
+            r.ord_priority ?? null,
+            r.ord_schedule ?? null,
+            r.ord_quick ?? null,
+            r.ord_backlog ?? null,
+            r.ord_unsorted ?? null,
           ]
         );
       }

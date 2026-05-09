@@ -31,7 +31,12 @@ CREATE TABLE IF NOT EXISTS todos (
   status TEXT NOT NULL DEFAULT 'active',
   source_day TEXT,
   created_at TEXT,
-  follow_up_sent INTEGER NOT NULL DEFAULT 0
+  follow_up_sent INTEGER NOT NULL DEFAULT 0,
+  ord_priority INTEGER,
+  ord_schedule INTEGER,
+  ord_quick INTEGER,
+  ord_backlog INTEGER,
+  ord_unsorted INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS standup_history (
@@ -103,6 +108,19 @@ async function initPgSchema(pool) {
   await pool.query(PG_SCHEMA);
 }
 
+async function migratePgTodoSortColumns(pool) {
+  const cols = [
+    "ord_priority",
+    "ord_schedule",
+    "ord_quick",
+    "ord_backlog",
+    "ord_unsorted",
+  ];
+  for (const c of cols) {
+    await pool.query(`ALTER TABLE todos ADD COLUMN IF NOT EXISTS ${c} INTEGER`);
+  }
+}
+
 // --- SQLite (local dev / no DATABASE_URL) ---
 
 let sqliteInstance = null;
@@ -129,7 +147,12 @@ function initSqliteSchema(db) {
       status TEXT NOT NULL DEFAULT 'active',
       source_day TEXT,
       created_at TEXT,
-      follow_up_sent INTEGER NOT NULL DEFAULT 0
+      follow_up_sent INTEGER NOT NULL DEFAULT 0,
+      ord_priority INTEGER,
+      ord_schedule INTEGER,
+      ord_quick INTEGER,
+      ord_backlog INTEGER,
+      ord_unsorted INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS standup_history (
@@ -181,6 +204,11 @@ function migrateSqliteColumns(db) {
     ["todos", "source_day", "TEXT"],
     ["todos", "created_at", "TEXT"],
     ["todos", "follow_up_sent", "INTEGER NOT NULL DEFAULT 0"],
+    ["todos", "ord_priority", "INTEGER"],
+    ["todos", "ord_schedule", "INTEGER"],
+    ["todos", "ord_quick", "INTEGER"],
+    ["todos", "ord_backlog", "INTEGER"],
+    ["todos", "ord_unsorted", "INTEGER"],
     ["job_applications", "sheet_row", "INTEGER"],
     ["job_applications", "synced_at", "TEXT NOT NULL DEFAULT ''"],
     ["job_applications", "notes", "TEXT"],
@@ -314,10 +342,24 @@ async function migrateFromLegacyJsonIfNeededPg(pool) {
   return true;
 }
 
+function sortOrderToDbCols(t) {
+  const s = t.sortOrder && typeof t.sortOrder === "object" ? t.sortOrder : {};
+  const n = (k) => (s[k] == null || Number.isNaN(Number(s[k])) ? null : Number(s[k]));
+  return {
+    ord_priority: n("priority"),
+    ord_schedule: n("schedule"),
+    ord_quick: n("quick"),
+    ord_backlog: n("backlog"),
+    ord_unsorted: n("unsorted"),
+  };
+}
+
 function insertTodoRowSqlite(db, t) {
+  const ord = sortOrderToDbCols(t);
   db.prepare(
-    `INSERT INTO todos (id, title, important, urgent, when_date, needs_clarification, status, source_day, created_at, follow_up_sent)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO todos (id, title, important, urgent, when_date, needs_clarification, status, source_day, created_at, follow_up_sent,
+                       ord_priority, ord_schedule, ord_quick, ord_backlog, ord_unsorted)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     t.id,
     t.title,
@@ -328,14 +370,21 @@ function insertTodoRowSqlite(db, t) {
     t.status || "active",
     t.sourceDay ?? null,
     t.createdAt ?? null,
-    t.followUpSent ? 1 : 0
+    t.followUpSent ? 1 : 0,
+    ord.ord_priority,
+    ord.ord_schedule,
+    ord.ord_quick,
+    ord.ord_backlog,
+    ord.ord_unsorted
   );
 }
 
 async function insertTodoRowPg(client, t) {
+  const ord = sortOrderToDbCols(t);
   await client.query(
-    `INSERT INTO todos (id, title, important, urgent, when_date, needs_clarification, status, source_day, created_at, follow_up_sent)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    `INSERT INTO todos (id, title, important, urgent, when_date, needs_clarification, status, source_day, created_at, follow_up_sent,
+                       ord_priority, ord_schedule, ord_quick, ord_backlog, ord_unsorted)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
     [
       t.id,
       t.title,
@@ -347,6 +396,11 @@ async function insertTodoRowPg(client, t) {
       t.sourceDay ?? null,
       t.createdAt ?? null,
       t.followUpSent ? 1 : 0,
+      ord.ord_priority,
+      ord.ord_schedule,
+      ord.ord_quick,
+      ord.ord_backlog,
+      ord.ord_unsorted,
     ]
   );
 }
@@ -389,6 +443,7 @@ export async function initLifeosDatabase() {
   if (usePostgres) {
     const pool = await getPool();
     await initPgSchema(pool);
+    await migratePgTodoSortColumns(pool);
     await migrateFromLegacyJsonIfNeededPg(pool);
     await ensureSeededPg(pool);
     console.info("[lifeosDb] Postgres mode (DATABASE_URL).");
@@ -459,6 +514,20 @@ function parseSheetDateForSort(raw, sheetRow) {
   return Number.isNaN(t) ? NaN : t;
 }
 
+/**
+ * Resolve applied_date to YYYY-MM-DD using existing row/year pinning logic.
+ * Returns null when the source date is empty or unparseable.
+ */
+export function resolveAppliedDateKey(raw, sheetRow) {
+  const t = parseSheetDateForSort(raw, sheetRow);
+  if (Number.isNaN(t)) return null;
+  const d = new Date(t);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 /** Sort by applied_date only; ties → higher sheet_row first. last_updated is synced but not used here. */
 function sortJobApplicationDbRows(rows) {
   const bestTime = (r) => {
@@ -482,6 +551,7 @@ function mapJobApplicationDbRow(r) {
     role: r.role,
     status: r.status,
     appliedDate: r.applied_date,
+    appliedDateKey: resolveAppliedDateKey(r.applied_date, r.sheet_row),
     lastUpdated: r.last_updated,
     notes: r.notes,
     sheetRow: r.sheet_row,
@@ -490,6 +560,8 @@ function mapJobApplicationDbRow(r) {
 }
 
 export function todoRowToJs(r) {
+  const numOrNull = (v) =>
+    v === null || v === undefined || v === "" ? null : Number(v);
   return {
     id: r.id,
     title: r.title,
@@ -501,6 +573,13 @@ export function todoRowToJs(r) {
     sourceDay: r.source_day,
     createdAt: r.created_at,
     followUpSent: Number(r.follow_up_sent) === 1,
+    sortOrder: {
+      priority: numOrNull(r.ord_priority),
+      schedule: numOrNull(r.ord_schedule),
+      quick: numOrNull(r.ord_quick),
+      backlog: numOrNull(r.ord_backlog),
+      unsorted: numOrNull(r.ord_unsorted),
+    },
   };
 }
 
@@ -516,7 +595,8 @@ function loadFullStateFromDbSqlite(db) {
 
   const todos = db
     .prepare(
-      `SELECT id, title, important, urgent, when_date, needs_clarification, status, source_day, created_at, follow_up_sent
+      `SELECT id, title, important, urgent, when_date, needs_clarification, status, source_day, created_at, follow_up_sent,
+              ord_priority, ord_schedule, ord_quick, ord_backlog, ord_unsorted
        FROM todos WHERE status = 'active' ORDER BY created_at`
     )
     .all()
@@ -574,7 +654,8 @@ async function loadFullStateFromDbPg(pool) {
   ] = await Promise.all([
     pool.query("SELECT date, json FROM days"),
     pool.query(
-      `SELECT id, title, important, urgent, when_date, needs_clarification, status, source_day, created_at, follow_up_sent
+      `SELECT id, title, important, urgent, when_date, needs_clarification, status, source_day, created_at, follow_up_sent,
+              ord_priority, ord_schedule, ord_quick, ord_backlog, ord_unsorted
        FROM todos WHERE status = 'active' ORDER BY created_at NULLS LAST`
     ),
     pool.query("SELECT json FROM pending_followup WHERE singleton = 1"),

@@ -6,6 +6,7 @@
     "frontend"
   ],
   "scripts": {
+    "test": "npm run test --workspace=backend",
     "start": "npm run start --workspace=backend",
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
@@ -17,5 +18,8 @@
     "fly:set-webhook": "npm run fly:set-webhook --workspace=backend",
     "migrate:sqlite-to-pg": "npm run migrate:sqlite-to-pg --workspace=backend",
     "jobs:sync": "npm run jobs:sync --workspace=backend"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
   }
 }

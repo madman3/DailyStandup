@@ -21,7 +21,12 @@ CREATE TABLE IF NOT EXISTS todos (
   status TEXT NOT NULL DEFAULT 'active',
   source_day TEXT,
   created_at TEXT,
-  follow_up_sent INTEGER NOT NULL DEFAULT 0
+  follow_up_sent INTEGER NOT NULL DEFAULT 0,
+  ord_priority INTEGER,
+  ord_schedule INTEGER,
+  ord_quick INTEGER,
+  ord_backlog INTEGER,
+  ord_unsorted INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS standup_history (

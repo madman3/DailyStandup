@@ -14,8 +14,35 @@ const NAV_ITEMS = [
 ];
 
 export default function App() {
+  const mockMode =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("mock");
   const [navSection, setNavSection] = useState(/** @type {AppNavSection} */ ("dashboard"));
-  const [data, setData] = useState(null);
+  const [data, setData] = useState(() => {
+    if (!mockMode) return null;
+    const todayKey = standupTodayKey();
+    return {
+      version: 2,
+      todos: [
+        {
+          id: "mock-1",
+          title: "Craft behavioral answers in STAR format",
+          important: true,
+          urgent: false,
+          when: null,
+          needsClarification: false,
+          status: "active",
+          sourceDay: todayKey,
+          createdAt: new Date().toISOString(),
+          followUpSent: false,
+          sortOrder: { priority: 1, schedule: null, quick: null, backlog: null, unsorted: null },
+        },
+      ],
+      days: {
+        [todayKey]: { accomplishments: [] },
+      },
+    };
+  });
   const [telegram, setTelegram] = useState(null);
   const [err, setErr] = useState(null);
   const [lastFetch, setLastFetch] = useState(null);
@@ -31,6 +58,7 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (mockMode) return;
     let cancelled = false;
 
     async function load() {
@@ -93,7 +121,7 @@ export default function App() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [refreshTick, authToken]);
+  }, [refreshTick, authToken, mockMode]);
 
   const todayKey = standupTodayKey();
   const tzLabel = import.meta.env.VITE_USER_TIMEZONE?.trim() || "UTC";
@@ -204,8 +232,9 @@ export default function App() {
           {navSection === "dashboard" && data && (
             <TodoPanel
               todos={data.todos}
+              days={data.days}
               todayKey={todayKey}
-              accomplishments={today?.accomplishments}
+              authToken={authToken}
               onComplete={() => setRefreshTick((t) => t + 1)}
             />
           )}
