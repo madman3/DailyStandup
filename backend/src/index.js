@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 import express from "express";
 import cron from "node-cron";
 import path from "path";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 import session from "express-session";
 import { standupDateKeyForInstant } from "./calendarDateKey.js";
@@ -285,6 +286,7 @@ async function processTelegramMessage(trimmed, atInstant, chatId) {
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET?.trim();
+const AUTH_COOKIE_NAME = "dash_auth";
 
 // Allow the Vercel frontend (different origin) to send cookies to this API.
 app.use(
@@ -306,6 +308,54 @@ if (DASHBOARD_PASSWORD) {
     WEBHOOK_SECRET ||
     "dev-dashboard-session-secret";
   const secureCookies = process.env.NODE_ENV === "production";
+  const cookieOptions = {
+    httpOnly: true,
+    secure: secureCookies,
+    sameSite: secureCookies ? "none" : "lax",
+    maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
+  };
+
+  function parseCookies(req) {
+    const raw = req.headers?.cookie;
+    if (!raw) return {};
+    const out = {};
+    for (const part of raw.split(";")) {
+      const [k, ...rest] = part.trim().split("=");
+      if (!k) continue;
+      out[k] = decodeURIComponent(rest.join("=") || "");
+    }
+    return out;
+  }
+
+  function hmac(value) {
+    return crypto.createHmac("sha256", sessionSecret).update(value).digest("base64url");
+  }
+
+  function makeAuthCookieValue() {
+    const expiresAt = String(Date.now() + 1000 * 60 * 60 * 24 * 30);
+    const payload = `v1.${expiresAt}`;
+    const sig = hmac(payload);
+    return `${payload}.${sig}`;
+  }
+
+  function timingSafeEqualString(a, b) {
+    const aa = Buffer.from(String(a));
+    const bb = Buffer.from(String(b));
+    if (aa.length !== bb.length) return false;
+    return crypto.timingSafeEqual(aa, bb);
+  }
+
+  function hasValidAuthCookie(req) {
+    const token = parseCookies(req)[AUTH_COOKIE_NAME];
+    if (!token) return false;
+    const parts = token.split(".");
+    if (parts.length !== 3 || parts[0] !== "v1") return false;
+    const expiresAt = Number(parts[1]);
+    if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) return false;
+    const payload = `${parts[0]}.${parts[1]}`;
+    const expectedSig = hmac(payload);
+    return timingSafeEqualString(parts[2], expectedSig);
+  }
 
   app.use(
     session({
@@ -313,12 +363,7 @@ if (DASHBOARD_PASSWORD) {
       secret: sessionSecret,
       resave: false,
       saveUninitialized: false,
-      cookie: {
-        httpOnly: true,
-        secure: secureCookies,
-        sameSite: secureCookies ? "none" : "lax",
-        maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
-      },
+      cookie: cookieOptions,
     })
   );
 
@@ -331,12 +376,16 @@ if (DASHBOARD_PASSWORD) {
       return res.status(401).json({ error: "unauthorized" });
     }
     req.session.authenticated = true;
-    res.json({ ok: true });
+    req.session.save(() => {
+      res.cookie(AUTH_COOKIE_NAME, makeAuthCookieValue(), cookieOptions);
+      res.json({ ok: true });
+    });
   });
 
   app.post("/api/logout", (req, res) => {
     req.session.destroy(() => {
       res.clearCookie("dash_session");
+      res.clearCookie(AUTH_COOKIE_NAME);
       res.json({ ok: true });
     });
   });
@@ -358,7 +407,7 @@ if (DASHBOARD_PASSWORD) {
       p === "/api/replay" ||
       p === "/api/standup-history";
     if (skip) return next();
-    if (req.session?.authenticated) return next();
+    if (req.session?.authenticated || hasValidAuthCookie(req)) return next();
     return res.status(401).json({ error: "unauthorized" });
   });
 } else {
