@@ -354,6 +354,7 @@ if (DASHBOARD_PASSWORD) {
       p === "/webhook" ||
       p === "/api/ingest" ||
       p === "/api/jobs/sync" ||
+      p === "/api/health-sync" ||
       p === "/api/replay" ||
       p === "/api/standup-history";
     if (skip) return next();
@@ -409,6 +410,68 @@ app.get("/api/state", async (_req, res) => {
       body.detail = err instanceof Error ? err.message : String(err);
     }
     res.status(500).json(body);
+  }
+});
+
+app.post("/api/health-sync", async (req, res) => {
+  const sent = req.get("X-Telegram-Bot-Api-Secret-Token");
+  if (!WEBHOOK_SECRET) {
+    console.warn(
+      "TELEGRAM_WEBHOOK_SECRET is not set — refusing /api/health-sync. Add it to .env."
+    );
+    return res.status(503).json({ error: "Webhook secret not configured" });
+  }
+  if (!sent || sent !== WEBHOOK_SECRET) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+
+  const body = req.body || {};
+  const date = req.query.date || body.date;
+  const parsed = new Date(date);
+  if (!date || Number.isNaN(parsed.getTime())) {
+    return res.status(400).json({ error: "Invalid date." });
+  }
+  const normalizedDate = parsed.toISOString().split("T")[0];
+
+  const rawSleep = req.query.sleepHours ?? body.sleepHours;
+  let sleepHours =
+    rawSleep !== undefined && rawSleep !== null && rawSleep !== ""
+      ? parseFloat(rawSleep)
+      : undefined;
+
+  if (sleepHours !== undefined) {
+    if (isNaN(sleepHours)) {
+      return res.status(400).json({ error: "Invalid sleepHours. Expected number 0-24." });
+    }
+    sleepHours = Math.round(sleepHours * 100) / 100;
+    if (sleepHours < 0 || sleepHours > 24) {
+      return res.status(400).json({ error: "Invalid sleepHours. Expected number 0-24." });
+    }
+  }
+
+  const patch = {};
+  const outMerged = {};
+
+  if (sleepHours !== undefined) {
+    patch.sleepHours = sleepHours;
+    outMerged.sleepHours = sleepHours;
+  }
+
+  if (body.steps !== undefined) {
+    const v = body.steps;
+    if (!Number.isInteger(v) || v <= 0) {
+      return res.status(400).json({ error: "Invalid steps. Expected positive integer." });
+    }
+    patch.steps = v;
+    outMerged.steps = v;
+  }
+
+  try {
+    await mergeIntoDay(normalizedDate, patch);
+    res.status(200).json({ ok: true, date: normalizedDate, merged: outMerged });
+  } catch (e) {
+    console.error("health-sync:", e);
+    res.status(500).json({ error: String(e.message) });
   }
 });
 

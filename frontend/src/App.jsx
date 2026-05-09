@@ -1,10 +1,20 @@
 import { useEffect, useState } from "react";
 import { apiUrl } from "./api.js";
-import { AnalyticsDashboard } from "./components/AnalyticsDashboard.jsx";
+import { AnalyticsDashboard, DashboardMetrics } from "./components/AnalyticsDashboard.jsx";
 import { TodoPanel } from "./components/TodoPanel.jsx";
 import { standupTodayKey } from "./lib/calendarDateKey.js";
 
+/** @typedef {'dashboard' | 'health' | 'jobs' | 'data'} AppNavSection */
+
+const NAV_ITEMS = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "health", label: "Health" },
+  { id: "jobs", label: "Jobs" },
+  { id: "data", label: "Data" },
+];
+
 export default function App() {
+  const [navSection, setNavSection] = useState(/** @type {AppNavSection} */ ("dashboard"));
   const [data, setData] = useState(null);
   const [telegram, setTelegram] = useState(null);
   const [err, setErr] = useState(null);
@@ -125,125 +135,140 @@ export default function App() {
   }
 
   return (
-    <div className="app">
-      <header className="header">
-        <h1>Daily Standup</h1>
-        <p className="muted">
-          Personal analytics · synced every 5s
-          {lastFetch && (
-            <>
-              {" "}
-              · last update {lastFetch.toLocaleTimeString()}
-            </>
-          )}
-        </p>
-      </header>
-
-      {err && (
-        <div className="banner error">
-          Cannot reach API: {err}. Local: run backend on port 3001. Production: set{" "}
-          <code>VITE_API_URL</code> to your Fly.io URL.
-        </div>
-      )}
-
-      <AnalyticsDashboard days={data?.days} chartEndDate={todayKey} />
-
-      {data && (
-        <TodoPanel
-          todos={data.todos}
-          todayKey={todayKey}
-          accomplishments={today?.accomplishments}
-          onComplete={() => setRefreshTick((t) => t + 1)}
-        />
-      )}
-
-      {data && Array.isArray(data.jobApplications) && data.jobApplications.length > 0 && (
-        <section className="panel">
-          <h2 className="panel-title">Job applications (Google Sheet)</h2>
-          <p className="muted small" style={{ marginBottom: "0.75rem" }}>
-            Synced from your sheet; backend refreshes hourly when configured.
-          </p>
-          <ul className="accomplishment-list" style={{ margin: 0 }}>
-            {data.jobApplications.map((j) => (
-              <li key={j.id} style={{ marginBottom: "0.5rem" }}>
-                <strong>{j.company || "—"}</strong>
-                {j.role ? ` · ${j.role}` : ""}
-                {j.status ? (
-                  <span className="pill" style={{ marginLeft: "0.35rem" }}>
-                    {j.status}
-                  </span>
-                ) : null}
-                {j.appliedDate ? (
-                  <span className="muted small" style={{ marginLeft: "0.35rem" }}>
-                    applied {j.appliedDate}
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section className="panel">
-        <h2>
-          Today ({todayKey}, {tzLabel})
-        </h2>
-        {!data && !err && <p className="muted">Loading…</p>}
-        {data && !today && (
+    <div className="app app-shell">
+      <div className="app-shell__masthead">
+        <header className="header">
+          <h1>Daily Standup</h1>
           <p className="muted">
-            No entry for this calendar day yet. Days with data:{" "}
-            {dayKeys.length ? dayKeys.join(", ") : "none"}.
+            Personal analytics · synced every 5s
+            {lastFetch && (
+              <>
+                {" "}
+                · last update {lastFetch.toLocaleTimeString()}
+              </>
+            )}
           </p>
-        )}
-        {today?.lastError && (
-          <div className="banner error">
-            Gemini / parse error (message still saved): {today.lastError}
+        </header>
+
+        {err && (
+          <div className="banner error app-shell__banner">
+            Cannot reach API: {err}. Local: run backend on port 3001. Production: set{" "}
+            <code>VITE_API_URL</code> to your Fly.io URL.
           </div>
         )}
-      </section>
 
-      <details className="panel details-debug">
-        <summary>Telegram webhook &amp; debug</summary>
-        {!telegram && !err && <p className="muted">Loading…</p>}
-        {telegram && !tgOk && (
-          <p className="banner error">
-            {telegram.error || "Could not load Telegram status (token missing?)."}
-          </p>
-        )}
-        {tgOk && tgResult && (
-          <ul className="tg-status">
-            <li>
-              <strong>Webhook URL</strong>:{" "}
-              {tgResult.url ? (
-                <code>{tgResult.url}</code>
-              ) : (
-                <span className="warn">empty — run register-webhook with ngrok URL</span>
-              )}
-            </li>
-            <li>
-              <strong>Pending updates</strong>: {tgResult.pending_update_count ?? 0}
-            </li>
-            {(tgResult.last_error_message || tgResult.last_error_date) && (
-              <li className="warn">
-                <strong>Last Telegram error</strong>: {tgResult.last_error_message || "—"}
-              </li>
-            )}
-          </ul>
-        )}
-        <p className="muted small">
-          Backend logs <code>[webhook] update_id=…</code> when Telegram POSTs to{" "}
-          <code>/webhook</code>.
-        </p>
-      </details>
+        <DashboardMetrics days={data?.days} chartEndDate={todayKey} />
+      </div>
 
-      <details className="panel details-debug">
-        <summary>Raw state JSON</summary>
-        {data?.days && Object.keys(data.days).length > 0 ? (
-          <pre className="mono">{JSON.stringify(data.days, null, 2)}</pre>
-        ) : (
-          <p className="muted">No days in state yet.</p>
-        )}
-      </details>
+      <div className="app-shell__nav-row">
+        <aside className="app-sidebar">
+          <nav className="app-nav" aria-label="Primary">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={
+                  navSection === item.id ? "app-nav__btn app-nav__btn--active" : "app-nav__btn"
+                }
+                aria-current={navSection === item.id ? "page" : undefined}
+                onClick={() => setNavSection(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        </aside>
+
+        <div className="app-main">
+          {navSection === "dashboard" && data && (
+            <TodoPanel
+              todos={data.todos}
+              todayKey={todayKey}
+              accomplishments={today?.accomplishments}
+              onComplete={() => setRefreshTick((t) => t + 1)}
+            />
+          )}
+
+          {navSection === "dashboard" && (
+            <AnalyticsDashboard section="dashboard" days={data?.days} chartEndDate={todayKey} />
+          )}
+
+          {(navSection === "health" || navSection === "jobs") && (
+            <AnalyticsDashboard
+              section={navSection}
+              days={data?.days}
+              chartEndDate={todayKey}
+              jobApplications={data?.jobApplications}
+              jobApplicationsReady={Boolean(data) || Boolean(err)}
+            />
+          )}
+
+          {navSection === "data" && (
+            <>
+              <section className="panel">
+                <h2>
+                  Today ({todayKey}, {tzLabel})
+                </h2>
+                {!data && !err && <p className="muted">Loading…</p>}
+                {data && !today && (
+                  <p className="muted">
+                    No entry for this calendar day yet. Days with data:{" "}
+                    {dayKeys.length ? dayKeys.join(", ") : "none"}.
+                  </p>
+                )}
+                {today?.lastError && (
+                  <div className="banner error">
+                    Gemini / parse error (message still saved): {today.lastError}
+                  </div>
+                )}
+              </section>
+
+              <details className="panel details-debug">
+                <summary>Telegram webhook &amp; debug</summary>
+                {!telegram && !err && <p className="muted">Loading…</p>}
+                {telegram && !tgOk && (
+                  <p className="banner error">
+                    {telegram.error || "Could not load Telegram status (token missing?)."}
+                  </p>
+                )}
+                {tgOk && tgResult && (
+                  <ul className="tg-status">
+                    <li>
+                      <strong>Webhook URL</strong>:{" "}
+                      {tgResult.url ? (
+                        <code>{tgResult.url}</code>
+                      ) : (
+                        <span className="warn">empty — run register-webhook with ngrok URL</span>
+                      )}
+                    </li>
+                    <li>
+                      <strong>Pending updates</strong>: {tgResult.pending_update_count ?? 0}
+                    </li>
+                    {(tgResult.last_error_message || tgResult.last_error_date) && (
+                      <li className="warn">
+                        <strong>Last Telegram error</strong>: {tgResult.last_error_message || "—"}
+                      </li>
+                    )}
+                  </ul>
+                )}
+                <p className="muted small">
+                  Backend logs <code>[webhook] update_id=…</code> when Telegram POSTs to{" "}
+                  <code>/webhook</code>.
+                </p>
+              </details>
+
+              <details className="panel details-debug">
+                <summary>Raw state JSON</summary>
+                {data?.days && Object.keys(data.days).length > 0 ? (
+                  <pre className="mono">{JSON.stringify(data.days, null, 2)}</pre>
+                ) : (
+                  <p className="muted">No days in state yet.</p>
+                )}
+              </details>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -112,18 +112,45 @@ export function latestDayEntry(series) {
 }
 
 /**
- * GitHub-style month grid: columns = weeks, rows = Sun–Sat.
- * @returns {{ title: string, columns: Array<Array<{ dateKey: string, inMonth: boolean, workout: boolean }>> }}
+ * Heatmap intensity 0–4 for Wispr-style streak charts (0 = padding / outside month).
+ * @typedef {{ dateKey: string, inMonth: boolean, level: number }} StreakMonthCell
+ */
+
+/**
+ * Month grid for workouts: intensity by activity (rest logged = mid tier).
+ * @returns {{ title: string, columns: Array<Array<StreakMonthCell>> }}
  */
 export function buildWorkoutMonthGrid(endDateKey, days) {
   return buildContributionMonthGrid(endDateKey, days, null, "workout");
 }
 
 /**
- * Same layout; `active` = protein goal + calorie deficit that day.
+ * Protein logged vs daily goal (shade = how close you got that day).
+ * @returns {{ title: string, columns: Array<Array<StreakMonthCell>> }}
  */
-export function buildGoalsMonthGrid(endDateKey, days, proteinGoal) {
-  return buildContributionMonthGrid(endDateKey, days, proteinGoal, "goals");
+export function buildProteinIntakeMonthGrid(endDateKey, days, proteinGoal) {
+  return buildContributionMonthGrid(endDateKey, days, proteinGoal, "proteinGrams");
+}
+
+function workoutLevel(day) {
+  if (!day) return 1;
+  if (dayCountsAsWorkout(day.workout)) return 4;
+  const w = day.workout;
+  if (w != null && String(w).trim() !== "") return 2;
+  return 1;
+}
+
+/** @returns {number} level 1–4 for in-month days with protein data */
+function proteinGramLevel(day, proteinGoal) {
+  const g = proteinGoal > 0 ? proteinGoal : 150;
+  const macros = day?.macros || {};
+  const p = macros.protein;
+  if (p == null) return 1;
+  const ratio = p / g;
+  if (ratio < 0.25) return 1;
+  if (ratio < 0.55) return 2;
+  if (ratio < 1) return 3;
+  return 4;
 }
 
 function buildContributionMonthGrid(endDateKey, days, proteinGoal, mode) {
@@ -133,6 +160,7 @@ function buildContributionMonthGrid(endDateKey, days, proteinGoal, mode) {
   const parts = endDateKey.split("-").map(Number);
   const y = parts[0];
   const m = parts[1];
+  const goal = proteinGoal ?? 150;
   const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
   const first = new Date(Date.UTC(y, m - 1, 1));
   const gridStart = new Date(first);
@@ -155,15 +183,18 @@ function buildContributionMonthGrid(endDateKey, days, proteinGoal, mode) {
       const dateKey = d.toISOString().slice(0, 10);
       const inMonth = d.getUTCMonth() === m - 1 && d.getUTCFullYear() === y;
       const day = days?.[dateKey];
-      let active = false;
-      if (inMonth && day) {
-        if (mode === "workout") {
-          active = dayCountsAsWorkout(day.workout);
-        } else {
-          active = dayMetProteinAndDeficit(day, proteinGoal ?? 150);
-        }
+      /** @type {number} */
+      let level = 0;
+
+      if (!inMonth) {
+        level = 0;
+      } else if (mode === "workout") {
+        level = workoutLevel(day);
+      } else if (mode === "proteinGrams") {
+        level = proteinGramLevel(day, goal);
       }
-      col.push({ dateKey, inMonth, active });
+
+      col.push({ dateKey, inMonth, level });
       d.setUTCDate(d.getUTCDate() + 1);
     }
     columns.push(col);
