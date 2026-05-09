@@ -23,15 +23,28 @@ export default function App() {
   const [needsAuth, setNeedsAuth] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [loginErr, setLoginErr] = useState(null);
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem("dash_auth_token") || "");
+
+  function authHeaders() {
+    if (!authToken) return {};
+    return { Authorization: `Bearer ${authToken}` };
+  }
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       try {
-        const stateRes = await fetch(apiUrl("/api/state"), { credentials: "include" });
+        const stateRes = await fetch(apiUrl("/api/state"), {
+          credentials: "include",
+          headers: authHeaders(),
+        });
         if (stateRes.status === 401) {
           if (!cancelled) {
+            if (authToken) {
+              localStorage.removeItem("dash_auth_token");
+              setAuthToken("");
+            }
             setNeedsAuth(true);
             setData(null);
             setTelegram(null);
@@ -42,9 +55,16 @@ export default function App() {
         if (!stateRes.ok) throw new Error(`state HTTP ${stateRes.status}`);
         const json = await stateRes.json();
 
-        const tgRes = await fetch(apiUrl("/api/telegram-status"), { credentials: "include" });
+        const tgRes = await fetch(apiUrl("/api/telegram-status"), {
+          credentials: "include",
+          headers: authHeaders(),
+        });
         if (tgRes.status === 401) {
           if (!cancelled) {
+            if (authToken) {
+              localStorage.removeItem("dash_auth_token");
+              setAuthToken("");
+            }
             setNeedsAuth(true);
             setData(null);
             setTelegram(null);
@@ -73,7 +93,7 @@ export default function App() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [refreshTick]);
+  }, [refreshTick, authToken]);
 
   const todayKey = standupTodayKey();
   const tzLabel = import.meta.env.VITE_USER_TIMEZONE?.trim() || "UTC";
@@ -97,6 +117,10 @@ export default function App() {
       if (!r.ok) {
         setLoginErr(json.error || `Login failed (HTTP ${r.status})`);
         return;
+      }
+      if (json?.token && typeof json.token === "string") {
+        localStorage.setItem("dash_auth_token", json.token);
+        setAuthToken(json.token);
       }
       setPasswordInput("");
       setNeedsAuth(false);
@@ -139,15 +163,6 @@ export default function App() {
       <div className="app-shell__masthead">
         <header className="header">
           <h1>Daily Standup</h1>
-          <p className="muted">
-            Personal analytics · synced every 5s
-            {lastFetch && (
-              <>
-                {" "}
-                · last update {lastFetch.toLocaleTimeString()}
-              </>
-            )}
-          </p>
         </header>
 
         {err && (
@@ -162,21 +177,27 @@ export default function App() {
 
       <div className="app-shell__nav-row">
         <aside className="app-sidebar">
-          <nav className="app-nav" aria-label="Primary">
-            {NAV_ITEMS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={
-                  navSection === item.id ? "app-nav__btn app-nav__btn--active" : "app-nav__btn"
-                }
-                aria-current={navSection === item.id ? "page" : undefined}
-                onClick={() => setNavSection(item.id)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
+          <div className="app-nav-shell">
+            <nav className="app-nav" aria-label="Primary">
+              {NAV_ITEMS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={
+                    navSection === item.id ? "app-nav__btn app-nav__btn--active" : "app-nav__btn"
+                  }
+                  aria-current={navSection === item.id ? "page" : undefined}
+                  onClick={() => setNavSection(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          </div>
+          <div className="app-sidebar-meta muted">
+            <div>Synced every 5s</div>
+            {lastFetch && <div>Last update {lastFetch.toLocaleTimeString()}</div>}
+          </div>
         </aside>
 
         <div className="app-main">

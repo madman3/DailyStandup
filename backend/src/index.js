@@ -347,6 +347,10 @@ if (DASHBOARD_PASSWORD) {
 
   function hasValidAuthCookie(req) {
     const token = parseCookies(req)[AUTH_COOKIE_NAME];
+    return hasValidAuthToken(token);
+  }
+
+  function hasValidAuthToken(token) {
     if (!token) return false;
     const parts = token.split(".");
     if (parts.length !== 3 || parts[0] !== "v1") return false;
@@ -377,8 +381,9 @@ if (DASHBOARD_PASSWORD) {
     }
     req.session.authenticated = true;
     req.session.save(() => {
-      res.cookie(AUTH_COOKIE_NAME, makeAuthCookieValue(), cookieOptions);
-      res.json({ ok: true });
+      const authToken = makeAuthCookieValue();
+      res.cookie(AUTH_COOKIE_NAME, authToken, cookieOptions);
+      res.json({ ok: true, token: authToken });
     });
   });
 
@@ -407,7 +412,14 @@ if (DASHBOARD_PASSWORD) {
       p === "/api/replay" ||
       p === "/api/standup-history";
     if (skip) return next();
-    if (req.session?.authenticated || hasValidAuthCookie(req)) return next();
+    const authHeader = req.get("authorization") || "";
+    const bearer =
+      authHeader.startsWith("Bearer ") || authHeader.startsWith("bearer ")
+        ? authHeader.slice(7).trim()
+        : null;
+    if (req.session?.authenticated || hasValidAuthCookie(req) || hasValidAuthToken(bearer)) {
+      return next();
+    }
     return res.status(401).json({ error: "unauthorized" });
   });
 } else {
