@@ -114,7 +114,9 @@ export function mergeDayPatch(prev, patch) {
     } else if (k === "macros" && typeof v === "object" && v !== null) {
       out.macros = { ...(out.macros || {}) };
       for (const [mk, mv] of Object.entries(v)) {
-        if (mv != null && mv !== undefined) out.macros[mk] = mv;
+        if (mv != null && mv !== undefined) {
+          out.macros[mk] = out.macros[mk] != null ? out.macros[mk] + mv : mv;
+        }
       }
     } else if (typeof v === "object" && v !== null && !Array.isArray(v)) {
       out[k] = { ...(out[k] || {}), ...v };

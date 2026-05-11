@@ -11,6 +11,10 @@ import crypto from "crypto";
 import { fileURLToPath } from "url";
 import session from "express-session";
 import { standupDateKeyForInstant } from "./calendarDateKey.js";
+import {
+  downloadTelegramVoiceBuffer,
+  transcribeVoiceBufferWithGemini,
+} from "./telegramVoice.js";
 import { buildPerDayPatches } from "./extractMessage.js";
 import { parseStandupHybrid } from "./parseStandupHybrid.js";
 import {
@@ -531,6 +535,15 @@ app.post("/api/health-sync", async (req, res) => {
     outMerged.steps = v;
   }
 
+  if (body.caloriesBurned !== undefined) {
+    const v = Math.round(Number(body.caloriesBurned));
+    if (!Number.isFinite(v) || v < 0) {
+      return res.status(400).json({ error: "Invalid caloriesBurned. Expected positive number." });
+    }
+    patch.caloriesBurned = v;
+    outMerged.caloriesBurned = v;
+  }
+
   try {
     await mergeIntoDay(normalizedDate, patch);
     res.status(200).json({ ok: true, date: normalizedDate, merged: outMerged });
@@ -683,14 +696,15 @@ app.get("/api/telegram-status", async (_req, res) => {
 
 app.post("/webhook", verifyTelegramWebhookSecret, async (req, res) => {
   const update = req.body;
+  const msg = update.message ?? update.edited_message ?? update.channel_post;
   if (process.env.NODE_ENV !== "production") {
     console.log(
-      "[webhook] update_id=%s has_message=%s",
+      "[webhook] update_id=%s has_text=%s has_voice=%s",
       update.update_id ?? "?",
-      Boolean(update.message?.text ?? update.edited_message?.text)
+      Boolean(msg?.text),
+      Boolean(msg?.voice)
     );
   }
-  const msg = update.message ?? update.edited_message ?? update.channel_post;
   const text = msg?.text;
   const trimmed = text != null ? String(text).trim() : "";
   const atInstant =
@@ -698,6 +712,64 @@ app.post("/webhook", verifyTelegramWebhookSecret, async (req, res) => {
       ? new Date(msg.date * 1000)
       : new Date();
   const chatId = msg?.chat?.id;
+
+  if (msg?.voice && !trimmed) {
+    const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+    if (!token) {
+      console.warn("[webhook] voice message received but TELEGRAM_BOT_TOKEN not set");
+      if (chatId) {
+        await sendTelegramMessage(
+          chatId,
+          "Sorry, couldn't transcribe that voice note. Try typing it instead."
+        );
+      }
+      return res.status(200).json({ ok: true, voice: true, error: "no_token" });
+    }
+
+    if (chatId) {
+      sendTelegramMessage(chatId, "🎤 Voice note received and logged.").catch((e) =>
+        console.warn("[webhook] voice ack send failed:", e)
+      );
+    }
+
+    let transcribed = "";
+    try {
+      const buf = await downloadTelegramVoiceBuffer(msg.voice.file_id, token);
+      transcribed = await transcribeVoiceBufferWithGemini(
+        buf,
+        msg.voice.mime_type || "audio/ogg"
+      );
+    } catch (err) {
+      console.error("[webhook] voice transcription failed:", err);
+      if (chatId) {
+        await sendTelegramMessage(
+          chatId,
+          "Sorry, couldn't transcribe that voice note. Try typing it instead."
+        );
+      }
+      return res
+        .status(200)
+        .json({ ok: true, voice: true, error: "transcription_failed" });
+    }
+
+    if (!transcribed) {
+      if (chatId) {
+        await sendTelegramMessage(
+          chatId,
+          "Sorry, couldn't transcribe that voice note. Try typing it instead."
+        );
+      }
+      return res.status(200).json({ ok: true, voice: true, empty: true });
+    }
+
+    try {
+      await processTelegramMessage(transcribed, atInstant, chatId);
+      return res.status(200).json({ ok: true, voice: true });
+    } catch (err) {
+      console.error("webhook voice / Gemini / state:", err);
+      return res.status(200).json({ ok: true, voice: true, loggedError: true });
+    }
+  }
 
   if (!trimmed) {
     return res.status(200).json({ ok: true, skipped: true });

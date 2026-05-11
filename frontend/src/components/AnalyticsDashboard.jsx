@@ -202,7 +202,7 @@ export function DashboardMetrics({ days, chartEndDate }) {
 
   return (
     <section className="metrics-row" aria-label="Today’s metrics">
-      <MetricCard label="Sleep" value={latest?.sleepHours} unit="h" />
+      <MetricCard label="Active Calories" value={latest?.caloriesBurned} unit="kcal" />
       <MetricCard
         label="Steps"
         value={latest?.steps != null ? latest.steps.toLocaleString() : null}

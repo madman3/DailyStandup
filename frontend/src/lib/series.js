@@ -142,7 +142,7 @@ function workoutLevel(day) {
 
 /** @returns {number} level 1–4 for in-month days with protein data */
 function proteinGramLevel(day, proteinGoal) {
-  const g = proteinGoal > 0 ? proteinGoal : 150;
+  const g = proteinGoal > 0 ? proteinGoal : 110;
   const macros = day?.macros || {};
   const p = macros.protein;
   if (p == null) return 1;
@@ -160,7 +160,7 @@ function buildContributionMonthGrid(endDateKey, days, proteinGoal, mode) {
   const parts = endDateKey.split("-").map(Number);
   const y = parts[0];
   const m = parts[1];
-  const goal = proteinGoal ?? 150;
+  const goal = proteinGoal ?? 110;
   const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
   const first = new Date(Date.UTC(y, m - 1, 1));
   const gridStart = new Date(first);

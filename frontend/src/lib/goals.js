@@ -2,5 +2,5 @@
 export function proteinGoalGrams() {
   const raw = import.meta.env.VITE_PROTEIN_GOAL_GRAMS;
   const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? Math.round(n) : 150;
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : 110;
 }

@@ -48,7 +48,8 @@ Rules:
 - needsClarification: true if you are not confident about important AND urgent AND when for this task (you would ask 1–2 follow-up questions). false if the message already makes priority clear enough.
 - jobsApplied: count of job applications submitted that day (integer ≥ 0), or null if not mentioned.
 - workout: short phrase like "skipped", "legs day", "30 min run", or null.
-- macros.calories: food intake / eaten (kcal). caloriesBurned: active energy or exercise calories burned that day (kcal out). If the user only gives net or TDEE, put intake in macros.calories and estimate or null for burned unless stated.
+- macros.calories: food intake / eaten (kcal). caloriesBurned: active energy or exercise calories burned (kcal out). If the user only gives net or TDEE, put intake in macros.calories and estimate or null for burned unless stated.
+- Nutrition estimation: if the user describes food by name, restaurant dish, or quantity (e.g. "3/4 lamb kebab roll", "100g fries", "half a cookie") WITHOUT giving explicit macro numbers, use your nutritional knowledge to estimate reasonable values for macros.calories, macros.protein, macros.carbs, and macros.fat. Sum all food items mentioned. Use best-effort estimates — do not leave macros null just because numbers weren't stated explicitly. If a dish is ambiguous, estimate conservatively.
 - dailyScore: integer 0-100 summarizing the day described, or null if impossible to infer.
 - Numbers must be JSON numbers, not strings.`;
 
