@@ -17,7 +17,6 @@ import {
   CHART_WINDOW_DAYS,
   daysToSeries,
   formatChartAxisLabel,
-  latestDayEntry,
 } from "../lib/series";
 
 /** @typedef {'dashboard' | 'health' | 'jobs' | 'data'} AppNavSection */
@@ -193,12 +192,9 @@ function ProteinGaugeMetric({ grams, goal = 110 }) {
 }
 
 /** Top KPI strip — rendered in masthead above the sidebar + main pane. */
-export function DashboardMetrics({ days, chartEndDate }) {
-  const series = daysToSeries(days, {
-    endDateKey: chartEndDate,
-    windowDays: CHART_WINDOW_DAYS,
-  });
-  const latest = latestDayEntry(series);
+export function DashboardMetrics({ days, selectedDate }) {
+  const latest = days?.[selectedDate] ?? null;
+  const proteinGrams = latest?.macros?.protein ?? null;
 
   return (
     <section className="metrics-row" aria-label="Today’s metrics">
@@ -226,7 +222,7 @@ export function DashboardMetrics({ days, chartEndDate }) {
         unit="/100"
         sub="AI estimate from your messages"
       />
-      <ProteinGaugeMetric grams={latest?.protein} goal={110} />
+      <ProteinGaugeMetric grams={proteinGrams} goal={110} />
     </section>
   );
 }
@@ -340,7 +336,9 @@ function JobApplicationsPanel({ jobApplications, ready }) {
 /**
  * @param {object} props
  * @param {Record<string, unknown> | null | undefined} props.days
- * @param {string} props.chartEndDate
+ * @param {string} props.chartEndDate — calendar “today” (YYYY-MM-DD); caps the date picker
+ * @param {string} props.selectedDate — health metrics + masthead KPIs use this calendar day (YYYY-MM-DD)
+ * @param {(key: string) => void} props.onSelectedDateChange
  * @param {AppNavSection} props.section — `data` is not rendered here (handled in App).
  * @param {unknown[] | undefined} props.jobApplications
  * @param {boolean} [props.jobApplicationsReady]
@@ -351,10 +349,15 @@ export function AnalyticsDashboard({
   section,
   jobApplications,
   jobApplicationsReady = true,
+  selectedDate: selectedDateProp,
+  onSelectedDateChange,
 }) {
+  const todayKey = chartEndDate;
+  const selectedDate = selectedDateProp ?? chartEndDate;
   const proteinGoal = proteinGoalGrams();
+  const seriesEndDate = section === "health" ? selectedDate : chartEndDate;
   const series = daysToSeries(days, {
-    endDateKey: chartEndDate,
+    endDateKey: seriesEndDate,
     windowDays: CHART_WINDOW_DAYS,
   });
   const jobsBaseSeries = daysToSeries(days, {
@@ -383,14 +386,18 @@ export function AnalyticsDashboard({
   const hasProtein = series.some((r) => r.protein != null);
   const hasCaloriesChart = hasCalIntake || hasCalBurned;
 
-  const workoutGrid = chartEndDate ? buildWorkoutMonthGrid(chartEndDate, days || {}) : { title: "", columns: [] };
-  const proteinHeatGrid = chartEndDate
-    ? buildProteinIntakeMonthGrid(chartEndDate, days || {}, proteinGoal)
-    : { title: "", columns: [] };
-
   const showHealthCharts = section === "health";
   const showJobsCharts = section === "jobs";
   const showDashboardCopy = section === "dashboard";
+
+  const workoutGrid =
+    showHealthCharts && selectedDate
+      ? buildWorkoutMonthGrid(selectedDate, days || {})
+      : { title: "", columns: [] };
+  const proteinHeatGrid =
+    showHealthCharts && selectedDate
+      ? buildProteinIntakeMonthGrid(selectedDate, days || {}, proteinGoal)
+      : { title: "", columns: [] };
 
   return (
     <div className="analytics analytics--subnav">
@@ -408,10 +415,36 @@ export function AnalyticsDashboard({
               Charts fill in as Gemini extracts sleep, steps, score, and macros from your standups.
             </p>
           )}
-          <p className="muted small chart-window-hint">
-            Weekly line/bar charts use the last {CHART_WINDOW_DAYS} days (ending today). Streak grids show the full
-            calendar month (Wispr-style heatmaps for workouts &amp; protein).
-          </p>
+          <div className="chart-hint-row">
+            <p className="muted small chart-window-hint">
+              Weekly line/bar charts use the last {CHART_WINDOW_DAYS} days (ending today). Streak grids show the full
+              calendar month (Wispr-style heatmaps for workouts &amp; protein).
+            </p>
+            <div className="date-picker-wrap">
+              <span className="date-picker-display">
+                {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </span>
+              <button type="button" className="date-picker-btn" aria-label="Pick a date">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <rect x="1" y="3" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M1 7h14" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M5 1v3M11 1v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  max={todayKey}
+                  onChange={(e) => e.target.value && onSelectedDateChange?.(e.target.value)}
+                  aria-hidden="true"
+                  tabIndex={-1}
+                />
+              </button>
+            </div>
+          </div>
           <div className="charts-grid">
             {workoutGrid.columns.length > 0 && (
               <StreakHeatmapChart
@@ -466,7 +499,7 @@ export function AnalyticsDashboard({
               <ChartShell title="Calories: intake vs burned" empty={!hasCaloriesChart}>
                 <>
                   <p className="muted small chart-inline-hint">
-                    Same scale (kcal): food logged in vs active energy out per day.
+                    Same scale (kcal): food logged in vs total energy burned per day (active + resting).
                   </p>
                   <ResponsiveContainer width="100%" height={240}>
                     <LineChart data={series} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
@@ -502,7 +535,8 @@ export function AnalyticsDashboard({
               <ChartShell title="Net calories (deficit or surplus)" empty={!hasCalorieNet}>
                 <>
                   <p className="muted small chart-inline-hint">
-                    Intake − burned. Below the line = calorie deficit; above = surplus.
+                    Intake − total energy burned (active + resting). Below the line = calorie deficit; above =
+                    surplus.
                   </p>
                   <ResponsiveContainer width="100%" height={240}>
                     <LineChart data={series} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>

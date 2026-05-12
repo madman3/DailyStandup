@@ -124,11 +124,18 @@ export default function App() {
   }, [refreshTick, authToken, mockMode]);
 
   const todayKey = standupTodayKey();
+  const [selectedDate, setSelectedDate] = useState(todayKey);
   const tzLabel = import.meta.env.VITE_USER_TIMEZONE?.trim() || "UTC";
   const today = data?.days?.[todayKey] ?? null;
   const dayKeys = data?.days ? Object.keys(data.days).sort().reverse() : [];
   const tgResult = telegram?.result;
   const tgOk = telegram?.ok === true;
+
+  useEffect(() => {
+    if (todayKey && selectedDate && selectedDate > todayKey) {
+      setSelectedDate(todayKey);
+    }
+  }, [todayKey, selectedDate]);
 
   async function login(e) {
     e?.preventDefault?.();
@@ -200,7 +207,7 @@ export default function App() {
           </div>
         )}
 
-        <DashboardMetrics days={data?.days} chartEndDate={todayKey} />
+        <DashboardMetrics days={data?.days} selectedDate={selectedDate} />
       </div>
 
       <div className="app-shell__nav-row">
@@ -240,7 +247,13 @@ export default function App() {
           )}
 
           {navSection === "dashboard" && (
-            <AnalyticsDashboard section="dashboard" days={data?.days} chartEndDate={todayKey} />
+            <AnalyticsDashboard
+              section="dashboard"
+              days={data?.days}
+              chartEndDate={todayKey}
+              selectedDate={selectedDate}
+              onSelectedDateChange={setSelectedDate}
+            />
           )}
 
           {(navSection === "health" || navSection === "jobs") && (
@@ -248,6 +261,8 @@ export default function App() {
               section={navSection}
               days={data?.days}
               chartEndDate={todayKey}
+              selectedDate={selectedDate}
+              onSelectedDateChange={setSelectedDate}
               jobApplications={data?.jobApplications}
               jobApplicationsReady={Boolean(data) || Boolean(err)}
             />
