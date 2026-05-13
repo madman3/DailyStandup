@@ -195,6 +195,7 @@ export function TodoPanel({ todos, days, todayKey, onComplete, authToken }) {
   const [busyId, setBusyId] = useState(null);
   const [busyRestoreKey, setBusyRestoreKey] = useState(null);
   const [err, setErr] = useState(null);
+  const [reflection, setReflection] = useState(null);
   const [activeTab, setActiveTab] = useState(/** @type {import('../lib/todoQuadrant.js').TodoQuadrant} */ ("priority"));
   const [menuForId, setMenuForId] = useState(null);
   /** Recently completed row menu (`id-completedAt`). */
@@ -219,6 +220,39 @@ export function TodoPanel({ todos, days, todayKey, onComplete, authToken }) {
   }, [listForTab]);
 
   const recentDone = useMemo(() => recentAccomplishmentsFromDays(days, 7), [days]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReflection(null);
+    (async () => {
+      try {
+        const r = await fetch(
+          apiUrl(`/api/daily-reflection?date=${encodeURIComponent(todayKey)}`),
+          {
+            credentials: "include",
+            headers: authHeaders(authToken),
+          }
+        );
+        if (!r.ok) return;
+        const data = await r.json().catch(() => null);
+        if (cancelled || !data || typeof data.content !== "string" || !data.content.trim()) return;
+        if (data.type !== "quote" && data.type !== "reflection") return;
+        setReflection({
+          type: data.type,
+          content: data.content.trim(),
+          attribution:
+            data.attribution != null && String(data.attribution).trim() !== ""
+              ? String(data.attribution).trim()
+              : null,
+        });
+      } catch {
+        /* silent — no reflection UI */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [todayKey, authToken]);
 
   const refresh = useCallback(() => onComplete?.(), [onComplete]);
 
@@ -361,11 +395,16 @@ export function TodoPanel({ todos, days, todayKey, onComplete, authToken }) {
   return (
     <section className="panel todo-panel">
       <h2 className="panel-title">To-do</h2>
-      <p className="muted small todo-panel-sub">
-        Tabs reflect how you described tasks to the bot (or use Move to reclassify). Drag the handle (⠿) to reorder
-        within a tab. Use the actions control on hover or right-click to move between tabs. Recently completed (last 7
-        days) is below — older completions stay in your data but hide here.
-      </p>
+      {reflection ? (
+        <div className="todo-reflection">
+          <p className="todo-reflection__content">
+            {reflection.type === "quote" ? `"${reflection.content}"` : reflection.content}
+          </p>
+          {reflection.attribution && (
+            <span className="todo-reflection__attribution">— {reflection.attribution}</span>
+          )}
+        </div>
+      ) : null}
 
       <div className="todo-tab-bar" role="tablist" aria-label="Task quadrants">
         {TODO_TABS.map((tab) => (

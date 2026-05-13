@@ -10,6 +10,7 @@ import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
 import session from "express-session";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { standupDateKeyForInstant } from "./calendarDateKey.js";
 import {
   downloadTelegramVoiceBuffer,
@@ -122,6 +123,113 @@ async function handleClarificationReply(trimmed, chatId, dateKey) {
 
 function geminiDisabledByEnv() {
   return ["1", "true", "yes"].includes(process.env.GEMINI_DISABLE?.trim().toLowerCase() || "");
+}
+
+function addCalendarDaysYmd(ymd, deltaDays) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || "").trim());
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Last `count` calendar days ending at `endKey` (inclusive), oldest first. */
+function dateKeysEndingAt(endKey, count) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(endKey || ""))) return [];
+  const keys = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const k = addCalendarDaysYmd(endKey, -i);
+    if (k) keys.push(k);
+  }
+  return keys;
+}
+
+function metricsSnapshotForReflection(day) {
+  const d = day && typeof day === "object" ? day : {};
+  const macros = d.macros && typeof d.macros === "object" ? d.macros : {};
+  return {
+    steps: d.steps ?? null,
+    sleepHours: d.sleepHours ?? null,
+    caloriesBurned: d.caloriesBurned ?? null,
+    protein: macros.protein ?? null,
+    carbs: macros.carbs ?? null,
+    fat: macros.fat ?? null,
+    calories: macros.calories ?? null,
+    dailyScore: d.dailyScore ?? null,
+    workout: d.workout ?? null,
+    jobsApplied: d.jobsApplied ?? null,
+  };
+}
+
+/** Recent completed todo titles from accomplishments across all days (newest first). */
+function collectRecentCompletedTodos(state, limit) {
+  const rows = [];
+  for (const dk of Object.keys(state.days || {})) {
+    const accs = Array.isArray(state.days[dk]?.accomplishments) ? state.days[dk].accomplishments : [];
+    for (const a of accs) {
+      if (!a || typeof a.title !== "string" || !a.title.trim()) continue;
+      rows.push({
+        title: a.title.trim(),
+        completedAt: typeof a.completedAt === "string" ? a.completedAt : null,
+      });
+    }
+  }
+  rows.sort((a, b) => String(b.completedAt || "").localeCompare(String(a.completedAt || "")));
+  return rows.slice(0, limit);
+}
+
+function normalizeReflectionFromGemini(parsed) {
+  if (!parsed || typeof parsed !== "object") return null;
+  const type = parsed.type === "quote" ? "quote" : parsed.type === "reflection" ? "reflection" : null;
+  const content = typeof parsed.content === "string" ? parsed.content.trim() : "";
+  if (!type || !content) return null;
+  let attribution = null;
+  if (parsed.attribution != null && String(parsed.attribution).trim() !== "") {
+    attribution = String(parsed.attribution).trim();
+  }
+  return { type, content, attribution };
+}
+
+async function generateDailyReflectionWithGemini(accomplishments, metricsJson, completedTodos) {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY not set");
+  }
+  const modelName = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: modelName,
+    generationConfig: { responseMimeType: "application/json" },
+  });
+  const prompt = `You are a personal coach and analyst for a productivity and health dashboard. 
+You have access to the user's recent data. Based on this, generate ONE of the following 
+(your choice — pick whichever feels most meaningful and surprising for today):
+A) A quote from one of these thinkers that genuinely resonates with what this person 
+   accomplished or struggled with today, or with a pattern you notice in their data:
+   Yuval Noah Harari, Naval Ravikant, Ayn Rand, Jiddu Krishnamurti, Benjamin Franklin, 
+   Steve Jobs, Fumitake Koga & Ichiro Kishimi (The Courage to Be Disliked), 
+   Richard Feynman, Albert Einstein, Albert Camus, Franz Kafka.
+   You may also draw from adjacent thinkers in the same tradition.
+B) A personal realization or reflection derived from patterns in their actual data that 
+   they likely haven't noticed — something specific, not generic. Base it on real 
+   numbers and trends. Make it feel like an insight from a thoughtful friend who 
+   studied their data, not a bot summarizing it.
+Today's accomplishments: ${JSON.stringify(accomplishments)}
+Last 30 days of daily metrics: ${metricsJson}
+Recently completed tasks (last 30 days): ${completedTodos}
+Rules:
+- One or two sentences maximum. 
+- If a quote: include exact text + author. Be accurate — do not fabricate quotes.
+- If a reflection: be specific to their actual numbers. Never be generic.
+- Emojis: you may add a small sprinkle (typically 0–2) in \`content\` only when they genuinely fit the moment (e.g. steps, sleep, wins, streaks) — never forced, never decorative spam; omit entirely if none feel natural.
+- Do not explain your choice. Just deliver it.
+- Tone: warm, direct, a little philosophical. Like Naval or Feynman would talk to a friend.
+Return ONLY valid JSON: 
+{ "type": "quote" | "reflection", "content": string, "attribution": string | null }`;
+  const result = await model.generateContent(prompt);
+  const text = result?.response?.text?.() ?? "";
+  const parsed = JSON.parse(text);
+  return normalizeReflectionFromGemini(parsed);
 }
 
 async function processStandupPipeline(trimmed, atInstant, chatId, options = {}) {
@@ -475,6 +583,76 @@ app.get("/api/state", async (_req, res) => {
   } catch (err) {
     console.error(err);
     const body = { error: "Could not read state" };
+    if (process.env.NODE_ENV !== "production") {
+      body.detail = err instanceof Error ? err.message : String(err);
+    }
+    res.status(500).json(body);
+  }
+});
+
+app.get("/api/daily-reflection", async (req, res) => {
+  const raw = req.query.date;
+  const date = typeof raw === "string" ? raw.trim() : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: "Invalid or missing date=YYYY-MM-DD" });
+  }
+  const todayKey = standupDateKeyForInstant(new Date());
+  if (date > todayKey) {
+    return res.status(400).json({ error: "Cannot generate reflection for a future date" });
+  }
+
+  try {
+    const state = await readState();
+    const day = state.days?.[date] && typeof state.days[date] === "object" ? state.days[date] : {};
+    const cached = day.reflection;
+    if (
+      cached &&
+      typeof cached === "object" &&
+      (cached.type === "quote" || cached.type === "reflection") &&
+      typeof cached.content === "string" &&
+      cached.content.trim()
+    ) {
+      return res.json({
+        type: cached.type,
+        content: cached.content.trim(),
+        attribution:
+          cached.attribution != null && String(cached.attribution).trim() !== ""
+            ? String(cached.attribution).trim()
+            : null,
+      });
+    }
+
+    if (state.geminiPaused || geminiDisabledByEnv() || isGeminiCircuitOpen()) {
+      return res.status(503).json({ error: "Gemini unavailable (paused, disabled, or cool-down)" });
+    }
+
+    const accomplishments = Array.isArray(day.accomplishments) ? day.accomplishments : [];
+    const keys30 = dateKeysEndingAt(date, 30);
+    const metricsSeries = keys30.map((dk) => ({
+      date: dk,
+      ...metricsSnapshotForReflection(state.days?.[dk]),
+    }));
+    const metricsJson = JSON.stringify(metricsSeries);
+    const completedTodos = collectRecentCompletedTodos(state, 30);
+    const completedTodosJson = JSON.stringify(completedTodos);
+
+    const reflection = await generateDailyReflectionWithGemini(
+      accomplishments,
+      metricsJson,
+      completedTodosJson
+    );
+    if (!reflection) {
+      return res.status(502).json({ error: "Reflection generation returned empty or invalid JSON" });
+    }
+
+    await mergeIntoDay(date, { reflection });
+    return res.json(reflection);
+  } catch (err) {
+    console.error("daily-reflection:", err);
+    if (isQuotaExhaustedError(err)) {
+      openGeminiCircuit();
+    }
+    const body = { error: "Could not generate reflection" };
     if (process.env.NODE_ENV !== "production") {
       body.detail = err instanceof Error ? err.message : String(err);
     }
