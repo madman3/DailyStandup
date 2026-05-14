@@ -722,6 +722,14 @@ app.post("/api/health-sync", async (req, res) => {
     outMerged.caloriesBurned = v;
   }
 
+  if (body.workout !== undefined) {
+    const v = String(body.workout).trim().slice(0, 200);
+    if (v) {
+      patch.workout = v;
+      outMerged.workout = v;
+    }
+  }
+
   try {
     await mergeIntoDay(normalizedDate, patch);
     res.status(200).json({ ok: true, date: normalizedDate, merged: outMerged });

@@ -1,0 +1,5 @@
+{
+  "rules": [
+    "When writing rundowns or instructions for Cursor, describe what to do in plain English only — no code blocks, no JSX, no CSS snippets. Explain the change, the file, the location, and the logic in words. Cursor will write the actual code."
+  ]
+}

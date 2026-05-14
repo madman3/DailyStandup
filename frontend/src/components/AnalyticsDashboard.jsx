@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -144,9 +145,9 @@ function mergeJobsAppliedFromSheet(series, jobApplications, endDateKey) {
   });
 }
 
-function MetricCard({ label, value, unit, sub }) {
+function MetricCard({ label, value, unit, sub, className }) {
   return (
-    <div className="metric-stat">
+    <div className={className ? `metric-stat ${className}` : "metric-stat"}>
       <div className="metric-label">{label}</div>
       <div className="metric-value">
         {value != null && value !== "" ? value : "—"}
@@ -208,19 +209,12 @@ export function DashboardMetrics({ days, selectedDate }) {
         label="Jobs applied (today)"
         value={latest?.jobsApplied != null ? String(latest.jobsApplied) : null}
         unit=""
-        sub="Log applications in standup"
       />
       <MetricCard
+        className="metric-stat--workout-wide"
         label="Workout"
         value={latest?.workout}
         unit=""
-        sub="Log in Telegram"
-      />
-      <MetricCard
-        label="Daily score"
-        value={latest?.dailyScore}
-        unit="/100"
-        sub="AI estimate from your messages"
       />
       <ProteinGaugeMetric grams={proteinGrams} goal={110} />
     </section>
@@ -291,11 +285,43 @@ function StreakHeatmapChart({ title, subtitle, columns }) {
   );
 }
 
+function paginationPages(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = [1];
+  if (current > 3) pages.push("…");
+  for (let p = Math.max(2, current - 1); p <= Math.min(total - 1, current + 1); p++) {
+    pages.push(p);
+  }
+  if (current < total - 2) pages.push("…");
+  pages.push(total);
+  return pages;
+}
+
 function JobApplicationsPanel({ jobApplications, ready }) {
-  const list = Array.isArray(jobApplications) ? jobApplications : [];
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
+
+  const list = useMemo(() => {
+    if (!Array.isArray(jobApplications)) return [];
+    return [...jobApplications].sort((a, b) => {
+      // most recent first — sort by appliedDate descending
+      const da = a.appliedDateKey || a.appliedDate || "";
+      const db = b.appliedDateKey || b.appliedDate || "";
+      return db.localeCompare(da);
+    });
+  }, [jobApplications]);
+
+  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const paginated = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // reset to page 1 if data changes
+  useEffect(() => {
+    setPage(1);
+  }, [jobApplications?.length]);
+
   return (
     <section className="panel job-applications-panel">
-      <h2 className="panel-title">Job applications (Google Sheet)</h2>
+      <h2 className="panel-title">Applications</h2>
       {!ready ? (
         <p className="muted small" style={{ marginBottom: 0 }}>
           Loading…
@@ -306,27 +332,77 @@ function JobApplicationsPanel({ jobApplications, ready }) {
         </p>
       ) : (
         <>
-          <p className="muted small" style={{ marginBottom: "0.75rem" }}>
-            Synced from your sheet; backend refreshes hourly when configured.
-          </p>
-          <ul className="accomplishment-list" style={{ margin: 0 }}>
-            {list.map((j) => (
-              <li key={j.id} style={{ marginBottom: "0.5rem" }}>
-                <strong>{j.company || "—"}</strong>
-                {j.role ? ` · ${j.role}` : ""}
-                {j.status ? (
-                  <span className="pill" style={{ marginLeft: "0.35rem" }}>
-                    {j.status}
+          <div className="jobs-table" role="table" aria-label="Applications">
+            <div className="jobs-table__header" role="row">
+              <span className="jobs-table__col--company" role="columnheader">
+                Company
+              </span>
+              <span className="jobs-table__col--role" role="columnheader">
+                Role
+              </span>
+              <span className="jobs-table__col--status" role="columnheader">
+                Status
+              </span>
+              <span className="jobs-table__col--date" role="columnheader">
+                Date
+              </span>
+            </div>
+
+            {paginated.map((j) => {
+              const rawStatus = typeof j.status === "string" ? j.status.trim() : "";
+              const s = rawStatus.toLowerCase();
+              const plainStatus = s === "rejected" || s === "filled";
+              return (
+                <div key={j.id} className="jobs-table__row" role="row">
+                  <span className="jobs-table__col--company">{j.company || "—"}</span>
+                  <span className="jobs-table__col--role">{j.role || "—"}</span>
+                  <span className="jobs-table__col--status">
+                    {plainStatus ? (
+                      <span className="jobs-table__status--plain">{rawStatus}</span>
+                    ) : rawStatus ? (
+                      <span className="pill">{rawStatus}</span>
+                    ) : null}
                   </span>
-                ) : null}
-                {j.appliedDate ? (
-                  <span className="muted small" style={{ marginLeft: "0.35rem" }}>
-                    applied {j.appliedDate}
+                  <span className="jobs-table__col--date">{j.appliedDate || "—"}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="jobs-pagination" aria-label="Pagination">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                ←
+              </button>
+              {paginationPages(page, totalPages).map((p, i) =>
+                p === "…" ? (
+                  <span key={`ellipsis-${i}`} className="jobs-pagination__ellipsis">
+                    …
                   </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+                ) : (
+                  <button
+                    key={p}
+                    type="button"
+                    className={p === page ? "jobs-pagination__btn--active" : ""}
+                    onClick={() => setPage(p)}
+                  >
+                    {p}
+                  </button>
+                )
+              )}
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+              >
+                →
+              </button>
+            </div>
+          )}
         </>
       )}
     </section>
@@ -415,11 +491,7 @@ export function AnalyticsDashboard({
               Charts fill in as Gemini extracts sleep, steps, score, and macros from your standups.
             </p>
           )}
-          <div className="chart-hint-row">
-            <p className="muted small chart-window-hint">
-              Weekly line/bar charts use the last {CHART_WINDOW_DAYS} days (ending today). Streak grids show the full
-              calendar month (Wispr-style heatmaps for workouts &amp; protein).
-            </p>
+          <div className="chart-hint-row chart-hint-row--end">
             <div className="date-picker-wrap">
               <span className="date-picker-display">
                 {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-US", {
@@ -618,12 +690,8 @@ export function AnalyticsDashboard({
 
       {showJobsCharts && (
         <>
-          <p className="muted small chart-window-hint">
-            Jobs bar chart uses the last {JOBS_CHART_WINDOW_DAYS} days (ending today). Sheet rows list every application
-            synced from Google.
-          </p>
           <div className="charts-grid charts-grid--jobs">
-            <ChartShell title="Jobs applied" empty={!hasJobs}>
+            <ChartShell title="Daily" empty={!hasJobs}>
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={jobsSeries} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
@@ -632,7 +700,7 @@ export function AnalyticsDashboard({
                   <Tooltip {...BAR_TOOLTIP} />
                   <Bar
                     dataKey="jobsApplied"
-                    name="Jobs applied"
+                    name="Daily"
                     fill={COLORS.jobs}
                     radius={[6, 6, 0, 0]}
                     maxBarSize={48}
