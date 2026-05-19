@@ -207,7 +207,12 @@ export default function App() {
           </div>
         )}
 
-        <DashboardMetrics days={data?.days} selectedDate={selectedDate} />
+        <DashboardMetrics
+          days={data?.days}
+          selectedDate={selectedDate}
+          jobApplications={data?.jobApplications}
+          chartEndDate={todayKey}
+        />
       </div>
 
       <div className="app-shell__nav-row">

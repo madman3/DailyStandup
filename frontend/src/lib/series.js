@@ -111,6 +111,89 @@ export function latestDayEntry(series) {
   return series[series.length - 1];
 }
 
+function dateKeyFromAppliedDate(raw, fallbackYear) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  const yFallback = Number(fallbackYear);
+
+  // YYYY/MM/DD
+  let m = s.match(/^(\d{4})[\/](\d{1,2})[\/](\d{1,2})$/);
+  if (m) {
+    const y = Number(m[1]);
+    const mm = Number(m[2]);
+    const dd = Number(m[3]);
+    if (y >= 1900 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    }
+  }
+
+  // MM/DD[/YYYY]
+  m = s.match(/^(\d{1,2})[\/](\d{1,2})(?:[\/](\d{4}))?$/);
+  if (m) {
+    const mm = Number(m[1]);
+    const dd = Number(m[2]);
+    const y = m[3] ? Number(m[3]) : yFallback;
+    if (y >= 1900 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    }
+  }
+
+  // Month name + day (optionally year): "May 8", "May 8, 2026"
+  m = s.match(/^([A-Za-z]+)\s+(\d{1,2})(?:,?\s+(\d{4}))?$/);
+  if (m) {
+    const mon = m[1].slice(0, 3).toLowerCase();
+    const monthMap = {
+      jan: 1,
+      feb: 2,
+      mar: 3,
+      apr: 4,
+      may: 5,
+      jun: 6,
+      jul: 7,
+      aug: 8,
+      sep: 9,
+      oct: 10,
+      nov: 11,
+      dec: 12,
+    };
+    const mm = monthMap[mon];
+    const dd = Number(m[2]);
+    const y = m[3] ? Number(m[3]) : yFallback;
+    if (mm && y >= 1900 && dd >= 1 && dd <= 31) {
+      return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    }
+  }
+
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${mm}-${dd}`;
+}
+
+/** Overlay per-day job counts from the synced sheet onto chart/stat series rows. */
+export function mergeJobsAppliedFromSheet(series, jobApplications, endDateKey) {
+  const counts = new Map();
+  const fallbackYear = Number(String(endDateKey || "").slice(0, 4)) || new Date().getFullYear();
+  for (const row of Array.isArray(jobApplications) ? jobApplications : []) {
+    const key =
+      (typeof row?.appliedDateKey === "string" && /^\d{4}-\d{2}-\d{2}$/.test(row.appliedDateKey)
+        ? row.appliedDateKey
+        : null) || dateKeyFromAppliedDate(row?.appliedDate, fallbackYear);
+    if (!key) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return series.map((r) => {
+    const fromSheet = counts.get(r.date);
+    if (fromSheet != null) return { ...r, jobsApplied: fromSheet };
+    return r;
+  });
+}
+
 /**
  * Heatmap intensity 0–4 for Wispr-style streak charts (0 = padding / outside month).
  * @typedef {{ dateKey: string, inMonth: boolean, level: number }} StreakMonthCell

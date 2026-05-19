@@ -18,6 +18,7 @@ import {
   CHART_WINDOW_DAYS,
   daysToSeries,
   formatChartAxisLabel,
+  mergeJobsAppliedFromSheet,
 } from "../lib/series";
 
 /** @typedef {'dashboard' | 'health' | 'jobs' | 'data'} AppNavSection */
@@ -61,89 +62,6 @@ const BAR_TOOLTIP = {
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const JOBS_CHART_WINDOW_DAYS = 30;
-
-function dateKeyFromAppliedDate(raw, fallbackYear) {
-  if (raw == null) return null;
-  const s = String(raw).trim();
-  if (!s) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-
-  const yFallback = Number(fallbackYear);
-
-  // YYYY/MM/DD
-  let m = s.match(/^(\d{4})[\/](\d{1,2})[\/](\d{1,2})$/);
-  if (m) {
-    const y = Number(m[1]);
-    const mm = Number(m[2]);
-    const dd = Number(m[3]);
-    if (y >= 1900 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
-      return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
-    }
-  }
-
-  // MM/DD[/YYYY]
-  m = s.match(/^(\d{1,2})[\/](\d{1,2})(?:[\/](\d{4}))?$/);
-  if (m) {
-    const mm = Number(m[1]);
-    const dd = Number(m[2]);
-    const y = m[3] ? Number(m[3]) : yFallback;
-    if (y >= 1900 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
-      return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
-    }
-  }
-
-  // Month name + day (optionally year): "May 8", "May 8, 2026"
-  m = s.match(/^([A-Za-z]+)\s+(\d{1,2})(?:,?\s+(\d{4}))?$/);
-  if (m) {
-    const mon = m[1].slice(0, 3).toLowerCase();
-    const monthMap = {
-      jan: 1,
-      feb: 2,
-      mar: 3,
-      apr: 4,
-      may: 5,
-      jun: 6,
-      jul: 7,
-      aug: 8,
-      sep: 9,
-      oct: 10,
-      nov: 11,
-      dec: 12,
-    };
-    const mm = monthMap[mon];
-    const dd = Number(m[2]);
-    const y = m[3] ? Number(m[3]) : yFallback;
-    if (mm && y >= 1900 && dd >= 1 && dd <= 31) {
-      return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
-    }
-  }
-
-  // Final fallback for fully qualified parseable strings.
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return null;
-  const y = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${mm}-${dd}`;
-}
-
-function mergeJobsAppliedFromSheet(series, jobApplications, endDateKey) {
-  const counts = new Map();
-  const fallbackYear = Number(String(endDateKey || "").slice(0, 4)) || new Date().getFullYear();
-  for (const row of Array.isArray(jobApplications) ? jobApplications : []) {
-    const key =
-      (typeof row?.appliedDateKey === "string" && /^\d{4}-\d{2}-\d{2}$/.test(row.appliedDateKey)
-        ? row.appliedDateKey
-        : null) || dateKeyFromAppliedDate(row?.appliedDate, fallbackYear);
-    if (!key) continue;
-    counts.set(key, (counts.get(key) || 0) + 1);
-  }
-  return series.map((r) => {
-    const fromSheet = counts.get(r.date);
-    if (fromSheet != null) return { ...r, jobsApplied: fromSheet };
-    return r;
-  });
-}
 
 function MetricCard({ label, value, unit, sub, className }) {
   return (
@@ -193,9 +111,16 @@ function ProteinGaugeMetric({ grams, goal = 110 }) {
 }
 
 /** Top KPI strip — rendered in masthead above the sidebar + main pane. */
-export function DashboardMetrics({ days, selectedDate }) {
+export function DashboardMetrics({ days, selectedDate, jobApplications, chartEndDate }) {
   const latest = days?.[selectedDate] ?? null;
   const proteinGrams = latest?.macros?.protein ?? null;
+  const metricsSeries = mergeJobsAppliedFromSheet(
+    daysToSeries(days, { endDateKey: selectedDate, windowDays: CHART_WINDOW_DAYS }),
+    jobApplications,
+    chartEndDate ?? selectedDate
+  );
+  const selectedRow = metricsSeries.find((r) => r.date === selectedDate);
+  const jobsApplied = selectedRow?.jobsApplied ?? null;
 
   return (
     <section className="metrics-row" aria-label="Today’s metrics">
@@ -206,8 +131,8 @@ export function DashboardMetrics({ days, selectedDate }) {
         unit=""
       />
       <MetricCard
-        label="Jobs applied (today)"
-        value={latest?.jobsApplied != null ? String(latest.jobsApplied) : null}
+        label="Jobs"
+        value={jobsApplied != null ? String(jobsApplied) : null}
         unit=""
       />
       <MetricCard
@@ -432,10 +357,14 @@ export function AnalyticsDashboard({
   const selectedDate = selectedDateProp ?? chartEndDate;
   const proteinGoal = proteinGoalGrams();
   const seriesEndDate = section === "health" ? selectedDate : chartEndDate;
-  const series = daysToSeries(days, {
-    endDateKey: seriesEndDate,
-    windowDays: CHART_WINDOW_DAYS,
-  });
+  const series = mergeJobsAppliedFromSheet(
+    daysToSeries(days, {
+      endDateKey: seriesEndDate,
+      windowDays: CHART_WINDOW_DAYS,
+    }),
+    jobApplications,
+    chartEndDate
+  );
   const jobsBaseSeries = daysToSeries(days, {
     endDateKey: chartEndDate,
     windowDays: JOBS_CHART_WINDOW_DAYS,
